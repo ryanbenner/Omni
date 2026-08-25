@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
+import { getMatches } from "@tauri-apps/plugin-cli";
+import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import Viewer from "./components/Viewer.vue";
 import Sidebar from "./components/Sidebar.vue";
 import { useMediaList } from "./composables/useMediaList";
@@ -25,6 +28,32 @@ function onCommand(cmd: Command) {
 }
 
 useKeyboard(() => list.current.value?.kind ?? null, onCommand);
+
+function pathFromArgv(argv: string[]): string | null {
+  // argv[0] is the exe; first remaining non-flag arg is the file
+  const arg = argv.slice(1).find((a) => !a.startsWith("-"));
+  return arg ?? null;
+}
+
+onMounted(async () => {
+  await listen<string[]>("single-instance", (e) => {
+    const path = pathFromArgv(e.payload);
+    if (path) list.openFile(path);
+  });
+  try {
+    const matches = await getMatches();
+    const fileArg = matches.args.file;
+    if (fileArg && typeof fileArg.value === "string") {
+      await list.openFile(fileArg.value);
+    }
+  } catch {
+    // cli plugin unavailable (e.g. dev on mac without args); stay on empty state
+  }
+});
+
+function openDefaultApps() {
+  openUrl("ms-settings:defaultapps").catch(() => {});
+}
 </script>
 
 <template>
@@ -51,6 +80,9 @@ useKeyboard(() => list.current.value?.kind ?? null, onCommand);
           No file loaded. Open a video or image with Media Viewer
           (right-click a file, then "Open with").
         </p>
+        <button class="ctl settings-btn" @click="openDefaultApps">
+          Set as default in Windows Settings
+        </button>
       </div>
     </div>
   </main>
@@ -103,5 +135,14 @@ body {
 }
 .error-text {
   color: #d66;
+}
+.settings-btn {
+  margin-top: 1rem;
+  background: #222;
+  color: #ddd;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
 }
 </style>
