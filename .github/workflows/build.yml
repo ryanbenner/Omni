@@ -28,6 +28,9 @@ jobs:
       - name: frontend tests
         run: npm test
 
+      - name: build frontend for rust codegen
+        run: npm run build
+
       - name: rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

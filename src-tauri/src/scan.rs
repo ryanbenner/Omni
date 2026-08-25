@@ -41,7 +41,9 @@ pub fn scan_media(path: String) -> Result<ScanResult, String> {
     let launched = PathBuf::from(&path)
         .canonicalize()
         .map_err(|e| format!("cannot open {path}: {e}"))?;
-    let dir = launched.parent().ok_or("file has no parent directory")?;
+    // read the dir from the original path so item paths stay in user form;
+    // canonicalize only for the start-index comparison below
+    let dir = Path::new(&path).parent().ok_or("file has no parent directory")?;
     let mut items = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
         let p = entry.path();
@@ -126,5 +128,27 @@ mod tests {
     #[test]
     fn scan_errors_on_missing_file() {
         assert!(scan_media("/definitely/not/a/real/file.mp4".into()).is_err());
+    }
+
+    #[test]
+    fn item_paths_use_caller_directory_form_not_canonicalized() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["clip.mp4", "photo.jpg"] {
+            File::create(dir.path().join(name)).unwrap();
+        }
+        // build the launched path without canonicalizing, so it stays in
+        // whatever form the caller used (e.g. windows verbatim \\?\ prefix
+        // would otherwise leak into every returned item.path)
+        let launched = dir.path().join("photo.jpg");
+        let result = scan_media(launched.to_string_lossy().into_owned()).unwrap();
+        let expected_prefix = dir.path().to_string_lossy().into_owned();
+        for item in &result.items {
+            assert!(
+                item.path.starts_with(&expected_prefix),
+                "item path {} did not start with caller directory form {}",
+                item.path,
+                expected_prefix
+            );
+        }
     }
 }

@@ -9,8 +9,8 @@ pub fn run() {
             use tauri::{Emitter, Manager};
             let _ = app.emit("single-instance", argv);
             if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_focus();
                 let _ = win.unminimize();
+                let _ = win.set_focus();
             }
         }))
         .plugin(tauri_plugin_opener::init())
