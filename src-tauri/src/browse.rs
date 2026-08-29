@@ -85,8 +85,14 @@ pub fn read_dir_entries(path: String) -> Result<DirListing, String> {
 pub fn copy_file_to_clipboard(path: String) -> Result<(), String> {
     #[cfg(windows)]
     {
-        use clipboard_win::{formats, set_clipboard};
-        set_clipboard(formats::FileList, &[path.as_str()]).map_err(|e| e.to_string())
+        use clipboard_win::{formats, Clipboard, Setter};
+        // filelist's setter takes an unsized slice, so open the clipboard
+        // explicitly and write through the trait
+        let _clip = Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+        let files: [String; 1] = [path];
+        formats::FileList
+            .write_clipboard(&files)
+            .map_err(|e| e.to_string())
     }
     #[cfg(not(windows))]
     {
