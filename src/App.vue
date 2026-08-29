@@ -84,7 +84,7 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
         <div v-else class="empty">
           <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
           <p v-else class="empty-hint">
-            No file loaded. Open a video or image with Media Viewer (right-click a
+            No file loaded. Open a video or image with Omni (right-click a
             file, then "Open with") — or browse the file tree on the left.
           </p>
           <button class="settings-btn" @click="openDefaultApps">

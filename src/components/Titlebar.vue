@@ -17,8 +17,8 @@ const win = getCurrentWindow();
       <i class="ph ph-sidebar-simple" />
     </button>
     <div class="tb-brand" data-tauri-drag-region>
-      <i class="ph-fill ph-play-circle tb-logo" data-tauri-drag-region />
-      <span class="tb-name" data-tauri-drag-region>Media Viewer</span>
+      <span class="tb-logo-ring" data-tauri-drag-region />
+      <span class="tb-name" data-tauri-drag-region>Omni</span>
     </div>
     <div class="tb-spacer" data-tauri-drag-region />
     <div class="tb-controls">
@@ -68,9 +68,13 @@ const win = getCurrentWindow();
   align-items: center;
   gap: 7px;
 }
-.tb-logo {
-  font-size: 14px;
-  color: var(--color-accent);
+.tb-logo-ring {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 3.5px solid #c4c6cb;
+  box-sizing: border-box;
+  background: transparent;
 }
 .tb-name {
   font-size: 11.5px;

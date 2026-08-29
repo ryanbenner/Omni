@@ -1,4 +1,4 @@
-# Media Viewer
+# Omni
 
 Lightweight Windows media viewer for gaming clips and photos. Tauri 2 + Vue 3.
 
