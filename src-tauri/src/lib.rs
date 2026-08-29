@@ -1,4 +1,5 @@
 mod scan;
+mod browse;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,7 +20,11 @@ pub fn run() {
             app.handle().plugin(tauri_plugin_cli::init())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan::scan_media])
+        .invoke_handler(tauri::generate_handler![
+            scan::scan_media,
+            browse::list_drives,
+            browse::read_dir_entries
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

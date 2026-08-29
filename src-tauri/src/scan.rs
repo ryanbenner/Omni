@@ -36,6 +36,27 @@ pub fn sort_items(items: &mut [MediaItem]) {
     items.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| a.name.cmp(&b.name)));
 }
 
+pub fn media_item_from_entry(entry: &std::fs::DirEntry) -> Option<MediaItem> {
+    let p = entry.path();
+    if !p.is_file() {
+        return None;
+    }
+    let kind = kind_for(&p)?;
+    let mtime = entry
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    Some(MediaItem {
+        path: p.to_string_lossy().into_owned(),
+        kind: kind.to_string(),
+        name: entry.file_name().to_string_lossy().into_owned(),
+        mtime,
+    })
+}
+
 #[tauri::command]
 pub fn scan_media(path: String) -> Result<ScanResult, String> {
     let launched = PathBuf::from(&path)
@@ -46,24 +67,9 @@ pub fn scan_media(path: String) -> Result<ScanResult, String> {
     let dir = Path::new(&path).parent().ok_or("file has no parent directory")?;
     let mut items = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
-        let p = entry.path();
-        if !p.is_file() {
-            continue;
+        if let Some(item) = media_item_from_entry(&entry) {
+            items.push(item);
         }
-        let Some(kind) = kind_for(&p) else { continue };
-        let mtime = entry
-            .metadata()
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        items.push(MediaItem {
-            path: p.to_string_lossy().into_owned(),
-            kind: kind.to_string(),
-            name: entry.file_name().to_string_lossy().into_owned(),
-            mtime,
-        });
     }
     sort_items(&mut items);
     // canonicalize both sides so windows verbatim paths compare equal
