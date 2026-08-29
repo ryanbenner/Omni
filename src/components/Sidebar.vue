@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from "vue";
+import { nextTick, onUnmounted, ref, watch } from "vue";
 import { useFileTree } from "../composables/useFileTree";
 import type { Pin } from "../types";
 
@@ -11,11 +11,17 @@ tree.init().then(() => {
   if (props.currentPath) tree.reveal(props.currentPath);
 });
 
+const root = ref<HTMLElement | null>(null);
+
 watch(
   () => props.currentPath,
-  (p) => {
+  async (p) => {
     tree.setCurrent(p);
-    if (p) tree.reveal(p);
+    if (p) {
+      await tree.reveal(p);
+      await nextTick();
+      root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
+    }
   },
   { immediate: true },
 );
@@ -59,7 +65,7 @@ function pinClick(pin: Pin) {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" ref="root">
     <div class="scroll">
       <template v-if="tree.pins.value.length">
         <div class="section-label">PINNED</div>

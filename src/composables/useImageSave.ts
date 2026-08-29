@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { readFile, rename, writeFile } from "@tauri-apps/plugin-fs";
 
 export const ENCODABLE = ["jpg", "jpeg", "png", "webp"];
 
@@ -56,5 +56,9 @@ export async function saveRotated(
       0.95,
     );
   });
-  await writeFile(destPath, new Uint8Array(await blob.arrayBuffer()));
+  const bytes2 = new Uint8Array(await blob.arrayBuffer());
+  // write to a temp sibling then rename so a failed write never truncates the target
+  const tmp = destPath + ".omnitmp";
+  await writeFile(tmp, bytes2);
+  await rename(tmp, destPath);
 }

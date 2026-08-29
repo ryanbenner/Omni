@@ -56,6 +56,16 @@ pub fn read_dir_entries(path: String) -> Result<DirListing, String> {
         if name.starts_with('.') {
             continue;
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            // FILE_ATTRIBUTE_HIDDEN = 0x2, FILE_ATTRIBUTE_SYSTEM = 0x4
+            if let Ok(meta) = entry.metadata() {
+                if meta.file_attributes() & 0x6 != 0 {
+                    continue;
+                }
+            }
+        }
         let Ok(ft) = entry.file_type() else { continue };
         if ft.is_dir() {
             folders.push(FolderEntry {
