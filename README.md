@@ -11,6 +11,8 @@ Every push to `main` builds an NSIS installer on GitHub Actions:
 2. Download the `omni-windows` artifact
 3. Unzip and run the `.exe` installer
 
+The installer bundles ffmpeg for clip export, which puts it around 60-90 MB.
+
 The installer registers "Open with" entries for mp4/mkv/mov and
 jpg/jpeg/png/gif/webp/bmp/heic. Set it as default per-extension in
 Windows Settings (the app's empty screen has a shortcut button).

@@ -25,6 +25,23 @@ jobs:
       - name: install frontend deps
         run: npm ci
 
+      - name: cache ffmpeg sidecar
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/binaries
+          key: ffmpeg-8.1.2-essentials-win64
+
+      - name: download ffmpeg sidecar
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extract
+          Copy-Item ffmpeg-extract/ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
+          Remove-Item -Recurse -Force ffmpeg-extract, ffmpeg.zip
+
       - name: frontend tests
         run: npm test
 
