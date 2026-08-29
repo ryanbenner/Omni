@@ -130,6 +130,17 @@ describe("useFileTree", () => {
     ]);
   });
 
+  it("reclicking the same pin closes the scoped view", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Users", "Users");
+    await tree.pinClick(tree.pins.value[0]);
+    expect(tree.scope.value?.path).toBe("C:\\Users");
+    await tree.pinClick(tree.pins.value[0]);
+    expect(tree.scope.value).toBeNull();
+    expect(tree.rows.value[0]).toMatchObject({ path: "C:\\", kind: "drive" });
+  });
+
   it("reveal inside the scope keeps it; reveal outside clears it", async () => {
     const tree = useFileTree(() => {});
     await tree.init();

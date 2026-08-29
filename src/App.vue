@@ -83,12 +83,13 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
         <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />
         <div v-else class="empty">
           <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
-          <p v-else class="empty-hint">
-            No file loaded. Open a video or image with Omni (right-click a
-            file, then "Open with") — or browse the file tree on the left.
-          </p>
-          <button class="settings-btn" @click="openDefaultApps">
-            Set as default in Windows Settings
+          <p v-else class="empty-hint">No file open. Open one to begin.</p>
+          <button
+            class="settings-btn"
+            title="Choose default apps in Windows Settings"
+            @click="openDefaultApps"
+          >
+            Set Default
           </button>
         </div>
         <template v-if="list.items.value.length > 1">
@@ -185,7 +186,10 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
   color: #d66;
 }
 .settings-btn {
-  margin-top: 1rem;
+  /* anchored to the stage corner, not the centered text column */
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
   background: transparent;
   color: var(--color-accent);
   border: 1px solid var(--color-accent);

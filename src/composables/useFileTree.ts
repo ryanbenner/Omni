@@ -165,6 +165,11 @@ export function useFileTree(openFile: (path: string) => void) {
   }
 
   async function pinClick(pin: Pin) {
+    // reclicking the active pin closes the scoped view
+    if (scope.value?.path === pin.path) {
+      clearScope();
+      return;
+    }
     // scope the tree to the pin: its drive on top, the pin as expanded root
     scope.value = pin;
     await load(pin.path);
