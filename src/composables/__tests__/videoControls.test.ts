@@ -1,24 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SPEEDS, nextSpeed, clampTime, formatTime } from "../videoControls";
-
-describe("nextSpeed", () => {
-  it("cycles up and down through the spec speeds", () => {
-    expect(SPEEDS).toEqual([0.25, 0.5, 1, 1.5, 2]);
-    expect(nextSpeed(1, 1)).toBe(1.5);
-    expect(nextSpeed(1.5, 1)).toBe(2);
-    expect(nextSpeed(1, -1)).toBe(0.5);
-  });
-
-  it("clamps at both ends", () => {
-    expect(nextSpeed(2, 1)).toBe(2);
-    expect(nextSpeed(0.25, -1)).toBe(0.25);
-  });
-
-  it("recovers from an unknown current speed", () => {
-    expect(nextSpeed(1.25 as number, 1)).toBe(1.5);
-    expect(nextSpeed(1.25 as number, -1)).toBe(0.5);
-  });
-});
+import { clampTime, formatTime } from "../videoControls";
 
 describe("clampTime", () => {
   it("clamps into [0, duration]", () => {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MediaItem, ViewerAction } from "../types";
-import { clampTime, formatTime, nextSpeed } from "../composables/videoControls";
+import { clampTime, formatTime } from "../composables/videoControls";
 
 const props = defineProps<{ item: MediaItem }>();
 
@@ -13,27 +13,89 @@ const src = computed(() => convertFileSrc(props.item.path));
 const playing = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
-const speed = ref(1);
 const volume = ref(1);
 const muted = ref(false);
 const failed = ref(false);
 
 const FRAME = 1 / 60;
 const EDGE = 0.05;
+const SHUTTLE_RATE = 0.1;
+
+// hold-to-shuttle: > plays at 10% speed, < steps backwards at 10% speed
+// (video elements cannot play in reverse, so rev is a seek loop)
+const shuttle = ref<"fwd" | "rev" | null>(null);
+let priorRate = 1;
+let priorPaused = false;
+let revRaf = 0;
+let revLastTs = 0;
+
+function stopRevLoop() {
+  if (revRaf) cancelAnimationFrame(revRaf);
+  revRaf = 0;
+}
+
+function revTick(ts: number) {
+  const el = video.value;
+  if (!el || shuttle.value !== "rev") return;
+  const dt = revLastTs ? (ts - revLastTs) / 1000 : 0;
+  revLastTs = ts;
+  el.currentTime = Math.max(0, el.currentTime - SHUTTLE_RATE * dt);
+  revRaf = requestAnimationFrame(revTick);
+}
+
+function startShuttle(direction: 1 | -1) {
+  const el = video.value;
+  if (!el) return;
+  const mode = direction > 0 ? "fwd" : "rev";
+  if (shuttle.value === mode) return;
+  if (shuttle.value === null) {
+    priorRate = el.playbackRate;
+    priorPaused = el.paused;
+  }
+  stopRevLoop();
+  shuttle.value = mode;
+  if (mode === "fwd") {
+    el.playbackRate = SHUTTLE_RATE;
+    el.play().catch(() => {});
+  } else {
+    el.pause();
+    el.playbackRate = priorRate;
+    revLastTs = 0;
+    revRaf = requestAnimationFrame(revTick);
+  }
+}
+
+function stopShuttle(direction: 1 | -1) {
+  const el = video.value;
+  const mode = direction > 0 ? "fwd" : "rev";
+  if (!el || shuttle.value !== mode) return;
+  stopRevLoop();
+  shuttle.value = null;
+  el.playbackRate = priorRate;
+  if (priorPaused) el.pause();
+  else el.play().catch(() => {});
+}
+
+function clearShuttle() {
+  stopRevLoop();
+  shuttle.value = null;
+}
+
+onUnmounted(stopRevLoop);
 
 watch(src, () => {
   // new file: reset transient state, keep volume and mute
   failed.value = false;
-  speed.value = 1;
   currentTime.value = 0;
   duration.value = 0;
+  clearShuttle();
 });
 
 function onLoadedMetadata() {
   const el = video.value;
   if (!el) return;
   duration.value = el.duration;
-  el.playbackRate = speed.value;
+  el.playbackRate = 1;
   el.volume = volume.value;
   el.muted = muted.value;
   el.play().catch(() => {});
@@ -67,11 +129,6 @@ function seekToFraction(e: MouseEvent) {
   const rect = bar.getBoundingClientRect();
   const frac = (e.clientX - rect.left) / rect.width;
   el.currentTime = clampTime(frac * el.duration, el.duration);
-}
-
-function setSpeed(v: number) {
-  speed.value = v;
-  if (video.value) video.value.playbackRate = v;
 }
 
 function setVolume(e: Event) {
@@ -109,8 +166,11 @@ function handleAction(action: ViewerAction): boolean {
       el.pause();
       seekBy(action.frames * FRAME);
       return true;
-    case "cycleSpeed":
-      setSpeed(nextSpeed(speed.value, action.direction));
+    case "shuttleStart":
+      startShuttle(action.direction);
+      return true;
+    case "shuttleStop":
+      stopShuttle(action.direction);
       return true;
     case "toggleMute":
       toggleMute();
@@ -135,8 +195,11 @@ const progress = computed(() =>
     <div v-if="failed" class="video-error">
       <p>Couldn't play {{ item.name }}.</p>
       <p class="hint">
-        If this is an HEVC/H.265 clip, install "HEVC Video Extensions" from the
-        Microsoft Store, then reopen the file.
+        Windows couldn't decode this video. Note: an .mp4 file can still
+        contain HEVC/H.265 video (common for ShadowPlay HDR or high-quality
+        captures) — install the free "HEVC Video Extensions" from the
+        Microsoft Store, then reopen the file. .mkv files and files outside
+        your user folder also can't play in this viewer yet.
       </p>
     </div>
     <video
@@ -159,7 +222,7 @@ const progress = computed(() =>
       <div class="controls-row">
         <button class="ctl" @click="togglePlay">{{ playing ? "Pause" : "Play" }}</button>
         <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-        <span class="speed" v-show="speed !== 1">{{ speed }}x</span>
+        <span class="speed" v-show="shuttle">{{ shuttle === "fwd" ? "0.1x" : "-0.1x" }}</span>
         <span class="spacer" />
         <button class="ctl" @click="toggleMute">{{ muted ? "Unmute" : "Mute" }}</button>
         <input

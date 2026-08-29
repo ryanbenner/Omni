@@ -54,6 +54,13 @@ onMounted(async () => {
 function openDefaultApps() {
   openUrl("ms-settings:defaultapps").catch(() => {});
 }
+
+function navClick(dir: -1 | 1, e: MouseEvent) {
+  if (dir === -1) list.prev();
+  else list.next();
+  // drop focus so space keeps controlling the video, not this button
+  (e.currentTarget as HTMLElement).blur();
+}
 </script>
 
 <template>
@@ -74,6 +81,24 @@ function openDefaultApps() {
         {{ sidebarOpen ? "«" : "»" }}
       </button>
       <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />
+      <template v-if="list.items.value.length > 1">
+        <button
+          class="nav-arrow nav-prev"
+          :disabled="list.currentIndex.value === 0"
+          title="Previous file"
+          @click="navClick(-1, $event)"
+        >
+          &lt;
+        </button>
+        <button
+          class="nav-arrow nav-next"
+          :disabled="list.currentIndex.value === list.items.value.length - 1"
+          title="Next file"
+          @click="navClick(1, $event)"
+        >
+          &gt;
+        </button>
+      </template>
       <div v-else class="empty">
         <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
         <p v-else class="empty-hint">
@@ -144,5 +169,35 @@ body {
   border-radius: 4px;
   padding: 0.4rem 0.8rem;
   cursor: pointer;
+}
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 40px;
+  height: 64px;
+  background: #0006;
+  color: #ddd;
+  border: none;
+  border-radius: 6px;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+.nav-arrow:hover {
+  opacity: 0.9;
+}
+.nav-arrow:disabled {
+  opacity: 0.1;
+  cursor: default;
+}
+.nav-prev {
+  left: 10px;
+}
+.nav-next {
+  right: 10px;
 }
 </style>

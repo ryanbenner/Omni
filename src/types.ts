@@ -16,7 +16,8 @@ export type ViewerAction =
   | { type: "playPause" }
   | { type: "seek"; seconds: number }
   | { type: "frameStep"; frames: number }
-  | { type: "cycleSpeed"; direction: 1 | -1 }
+  | { type: "shuttleStart"; direction: 1 | -1 }
+  | { type: "shuttleStop"; direction: 1 | -1 }
   | { type: "toggleMute" }
   | { type: "toggleFullscreen" }
   | { type: "rotate" }

@@ -55,13 +55,28 @@ export function resolveKey(
     case ".":
       return { target: "viewer", action: { type: "frameStep", frames: 1 } };
     case "<":
-      return { target: "viewer", action: { type: "cycleSpeed", direction: -1 } };
+      return { target: "viewer", action: { type: "shuttleStart", direction: -1 } };
     case ">":
-      return { target: "viewer", action: { type: "cycleSpeed", direction: 1 } };
+      return { target: "viewer", action: { type: "shuttleStart", direction: 1 } };
     case "m":
       return { target: "viewer", action: { type: "toggleMute" } };
     case "f":
       return { target: "viewer", action: { type: "toggleFullscreen" } };
+  }
+  return null;
+}
+
+// keyup matters only for hold-to-shuttle: releasing < or > ends the shuttle
+export function resolveKeyUp(
+  e: KeyInput,
+  kind: "video" | "image" | null,
+): Command | null {
+  if (kind !== "video") return null;
+  switch (e.key) {
+    case "<":
+      return { target: "viewer", action: { type: "shuttleStop", direction: -1 } };
+    case ">":
+      return { target: "viewer", action: { type: "shuttleStop", direction: 1 } };
   }
   return null;
 }

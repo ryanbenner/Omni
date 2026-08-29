@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted } from "vue";
-import { resolveKey, type Command } from "./keymap";
+import { resolveKey, resolveKeyUp, type Command } from "./keymap";
 
 export function useKeyboard(
   kind: () => "video" | "image" | null,
@@ -12,6 +12,19 @@ export function useKeyboard(
       handler(cmd);
     }
   }
-  onMounted(() => window.addEventListener("keydown", onKeydown));
-  onUnmounted(() => window.removeEventListener("keydown", onKeydown));
+  function onKeyup(e: KeyboardEvent) {
+    const cmd = resolveKeyUp(e, kind());
+    if (cmd) {
+      e.preventDefault();
+      handler(cmd);
+    }
+  }
+  onMounted(() => {
+    window.addEventListener("keydown", onKeydown);
+    window.addEventListener("keyup", onKeyup);
+  });
+  onUnmounted(() => {
+    window.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("keyup", onKeyup);
+  });
 }

@@ -14,6 +14,7 @@ watch(src, () => {
   failed.value = false;
   t.reset();
   t.rotation.value = 0;
+  menu.value = null;
 });
 
 const ZOOM_STEP = 1.1;
@@ -27,7 +28,26 @@ const dragging = ref(false);
 let lastX = 0;
 let lastY = 0;
 
+const menu = ref<{ x: number; y: number } | null>(null);
+
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault();
+  menu.value = { x: e.clientX, y: e.clientY };
+}
+
+function resetView() {
+  t.reset();
+  t.rotation.value = 0;
+  menu.value = null;
+}
+
 function onPointerDown(e: PointerEvent) {
+  if (menu.value) {
+    // any click outside the menu closes it without starting a drag
+    menu.value = null;
+    return;
+  }
+  if (e.button !== 0) return;
   dragging.value = true;
   lastX = e.clientX;
   lastY = e.clientY;
@@ -71,6 +91,7 @@ defineExpose({ handleAction });
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
+    @contextmenu="onContextMenu"
   >
     <div v-if="failed" class="image-error">
       <p>Couldn't display {{ item.name }}.</p>
@@ -87,6 +108,14 @@ defineExpose({ handleAction });
       draggable="false"
       @error="failed = true"
     />
+    <div
+      v-if="menu"
+      class="context-menu"
+      :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
+      @pointerdown.stop
+    >
+      <button class="menu-item" @click="resetView">Reset view</button>
+    </div>
   </div>
 </template>
 
@@ -122,5 +151,28 @@ defineExpose({ handleAction });
   color: #999;
   max-width: 40ch;
   text-align: center;
+}
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 2px;
+  box-shadow: 0 4px 12px #0008;
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #ddd;
+  padding: 0.35rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.menu-item:hover {
+  background: #2c4a6e;
 }
 </style>

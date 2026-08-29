@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveKey, type Command } from "../keymap";
+import { resolveKey, resolveKeyUp, type Command } from "../keymap";
 
 const k = (key: string, shiftKey = false) => ({ key, shiftKey });
 
@@ -52,7 +52,7 @@ describe("resolveKey", () => {
     expect(resolveKey(k(" "), "image")).toBeNull();
   });
 
-  it("comma/period frame-step, angle brackets cycle speed", () => {
+  it("comma/period frame-step, angle brackets start shuttle", () => {
     expect(resolveKey(k(","), "video")).toEqual({
       target: "viewer",
       action: { type: "frameStep", frames: -1 },
@@ -63,12 +63,25 @@ describe("resolveKey", () => {
     });
     expect(resolveKey(k("<", true), "video")).toEqual({
       target: "viewer",
-      action: { type: "cycleSpeed", direction: -1 },
+      action: { type: "shuttleStart", direction: -1 },
     });
     expect(resolveKey(k(">", true), "video")).toEqual({
       target: "viewer",
-      action: { type: "cycleSpeed", direction: 1 },
+      action: { type: "shuttleStart", direction: 1 },
     });
+  });
+
+  it("releasing angle brackets stops the shuttle on video only", () => {
+    expect(resolveKeyUp(k("<", true), "video")).toEqual({
+      target: "viewer",
+      action: { type: "shuttleStop", direction: -1 },
+    });
+    expect(resolveKeyUp(k(">", true), "video")).toEqual({
+      target: "viewer",
+      action: { type: "shuttleStop", direction: 1 },
+    });
+    expect(resolveKeyUp(k(">", true), "image")).toBeNull();
+    expect(resolveKeyUp(k("m"), "video")).toBeNull();
   });
 
   it("m mutes and f fullscreens video; f fits image", () => {
