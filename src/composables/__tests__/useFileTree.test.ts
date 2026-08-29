@@ -99,4 +99,18 @@ describe("useFileTree", () => {
     tree2.removePin("C:\\Users");
     expect(tree2.pins.value).toHaveLength(0);
   });
+
+  it("pinClick expands the pinned folder and its ancestors, refreshing count", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Users", "Users");
+    expect(tree.pins.value[0].count).toBe(1);
+    await tree.pinClick(tree.pins.value[0]);
+    expect(tree.rows.value.map((r) => r.path)).toEqual([
+      "C:\\",
+      "C:\\Users",
+      "C:\\Users\\pic.jpg",
+    ]);
+    expect(tree.pins.value[0].count).toBe(1);
+  });
 });
