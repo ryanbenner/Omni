@@ -5,6 +5,7 @@ import type { MediaItem, ViewerAction } from "../types";
 import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
 
 const props = defineProps<{ item: MediaItem }>();
+const emit = defineEmits<{ deleteFile: [] }>();
 
 const container = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
@@ -102,12 +103,6 @@ const chipLabel = computed(() => {
   return speed.value + "x";
 });
 
-function frameStepClick(frames: number) {
-  const el = video.value;
-  if (!el) return;
-  el.pause();
-  seekBy(frames * FRAME);
-}
 
 const showBadge = computed(() => !playing.value && !failed.value);
 
@@ -280,6 +275,9 @@ const progress = computed(() =>
       </div>
     </div>
     <div v-if="!failed" class="controls" :class="{ hidden: !controlsVisible }">
+      <div class="time-row">
+        <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
+      </div>
       <div class="timeline" @click="seekToFraction">
         <div class="track">
           <div class="fill" :style="{ width: progress + '%' }" />
@@ -288,11 +286,8 @@ const progress = computed(() =>
       </div>
       <div class="transport">
         <div class="cluster left">
-          <button class="tbtn" title="Previous frame (,)" @click="frameStepClick(-1)">
-            <i class="ph ph-skip-back" />
-          </button>
-          <button class="tbtn" title="Next frame (.)" @click="frameStepClick(1)">
-            <i class="ph ph-skip-forward" />
+          <button class="tbtn" title="Delete file" @click="emit('deleteFile')">
+            <i class="ph ph-trash" />
           </button>
           <span class="speed-chip-wrap">
             <span class="speed-chip">
@@ -308,7 +303,6 @@ const progress = computed(() =>
               <option v-for="s in SPEEDS" :key="s" :value="String(s)">{{ s }}x</option>
             </select>
           </span>
-          <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
         </div>
         <button class="tbtn skip" title="Back 10 seconds" @click="seekTen(-1)">
           <span class="skip-wrap">
@@ -498,13 +492,14 @@ const progress = computed(() =>
   display: inline-flex;
 }
 .speed-chip {
-  height: 24px;
+  height: 26px;
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 0 8px;
-  border-radius: 5px;
-  border: 1px solid var(--color-neutral-800);
+  padding: 0 11px;
+  /* pill shape so it sits flush with the round icon buttons */
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-neutral-800) 70%, transparent);
   color: var(--color-neutral-400);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -542,12 +537,16 @@ const progress = computed(() =>
   letter-spacing: 0.02em;
   margin-top: 1px;
 }
+.time-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2px;
+}
 .time {
   font-size: 12px;
   color: var(--color-neutral-500);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  margin-left: 2px;
 }
 .play-btn {
   width: 34px;

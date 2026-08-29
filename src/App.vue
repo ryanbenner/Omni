@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { listen } from "@tauri-apps/api/event";
+import { ask, message } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import Titlebar from "./components/Titlebar.vue";
 import Viewer from "./components/Viewer.vue";
@@ -13,6 +15,7 @@ import type { Command } from "./composables/keymap";
 
 const list = useMediaList();
 const viewer = ref<InstanceType<typeof Viewer> | null>(null);
+const sidebar = ref<InstanceType<typeof Sidebar> | null>(null);
 const sidebarOpen = ref(true);
 
 const currentFolder = computed(() =>
@@ -61,6 +64,23 @@ function openDefaultApps() {
   openUrl("ms-settings:defaultapps").catch(() => {});
 }
 
+async function deleteCurrent() {
+  const cur = list.current.value;
+  if (!cur) return;
+  const yes = await ask(`Delete ${cur.name}? It will be moved to the Recycle Bin.`, {
+    title: "Delete file",
+    kind: "warning",
+  });
+  if (!yes) return;
+  try {
+    await invoke("delete_file", { path: cur.path });
+    list.removeItem(cur.path);
+    sidebar.value?.refreshDir(parentDir(cur.path));
+  } catch (e) {
+    await message(String(e), { title: "Delete failed", kind: "error" });
+  }
+}
+
 </script>
 
 <template>
@@ -69,6 +89,7 @@ function openDefaultApps() {
     <div class="body-row">
       <Sidebar
         v-if="sidebarOpen"
+        ref="sidebar"
         :current-path="list.current.value?.path ?? null"
         :current-folder="currentFolder"
         @open-file="list.openFile"
@@ -76,7 +97,12 @@ function openDefaultApps() {
         @file-renamed="list.renameItem"
       />
       <div class="stage">
-        <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />
+        <Viewer
+          v-if="list.current.value"
+          ref="viewer"
+          :item="list.current.value"
+          @delete-file="deleteCurrent"
+        />
         <div v-else class="empty">
           <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
           <p v-else class="empty-hint">No file open. Open one to begin.</p>

@@ -5,6 +5,7 @@ import VideoPlayer from "./VideoPlayer.vue";
 import ImageViewer from "./ImageViewer.vue";
 
 defineProps<{ item: MediaItem }>();
+defineEmits<{ deleteFile: [] }>();
 
 const child = ref<{ handleAction: (a: ViewerAction) => boolean } | null>(null);
 
@@ -16,6 +17,11 @@ defineExpose({ handleAction });
 </script>
 
 <template>
-  <VideoPlayer v-if="item.kind === 'video'" ref="child" :item="item" />
+  <VideoPlayer
+    v-if="item.kind === 'video'"
+    ref="child"
+    :item="item"
+    @delete-file="$emit('deleteFile')"
+  />
   <ImageViewer v-else ref="child" :item="item" />
 </template>

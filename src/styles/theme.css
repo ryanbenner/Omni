@@ -33,6 +33,12 @@ body {
   font-family: var(--font-body);
   font-size: 13px;
   overflow: hidden;
+  /* app chrome is not a document: drag-clicks must never paint selections */
+  user-select: none;
+}
+input,
+textarea {
+  user-select: text;
 }
 a {
   color: var(--color-accent-300);

@@ -124,6 +124,12 @@ async function commitRename() {
   }
 }
 
+// the app calls this after deleting the open file from the player controls
+function refreshDir(dirPath: string) {
+  tree.refresh(dirPath);
+}
+defineExpose({ refreshDir });
+
 async function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
