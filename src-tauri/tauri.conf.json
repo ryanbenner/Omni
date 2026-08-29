@@ -15,6 +15,7 @@
         "title": "Media Viewer",
         "width": 1280,
         "height": 800,
+        "decorations": false,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
       }
     ],
