@@ -39,7 +39,7 @@ function openRename() {
 
 function confirmReplace() {
   const name = draft.value.trim();
-  if (!name) return;
+  if (!name || name.includes("/") || name.includes("\\")) return; // keep the modal open
   renameOpen.value = false;
   emit("doExport", effectiveMode(), true, name);
 }
@@ -51,7 +51,7 @@ function confirmReplace() {
       <div class="seg">
         <button
           class="seg-opt"
-          :class="{ active: modeChoice === 'precise' && !capped }"
+          :class="{ active: modeChoice === 'precise' || capped }"
           :disabled="capped"
           @click="modeChoice = 'precise'"
         >

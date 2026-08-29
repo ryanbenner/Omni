@@ -19,6 +19,7 @@ pub struct ExportRequest {
 pub struct ExportSlot {
     pub child: Option<CommandChild>,
     pub generation: u64,
+    pub cancelled: bool,
 }
 
 #[derive(Default)]
@@ -93,6 +94,7 @@ pub async fn export_clip(
             .map_err(|e| e.to_string())?;
         slot.generation += 1;
         slot.child = Some(child);
+        slot.cancelled = false;
         (rx, slot.generation)
     };
 
@@ -132,19 +134,23 @@ pub async fn export_clip(
     }
     // only clear our own generation's slot — a cancel+immediate-re-export
     // may have already bumped the generation and stored a newer child
-    {
+    let was_cancelled = {
         let mut slot = state.0.lock().unwrap();
-        if slot.generation == my_gen {
+        let c = if slot.generation == my_gen {
             slot.child = None;
-        }
-    }
+            slot.cancelled
+        } else {
+            false
+        };
+        c
+    };
     if code == Some(0) {
         let _ = app.emit("export-progress", serde_json::json!({ "percent": 100.0 }));
         Ok(())
     } else {
         // never leave a partial file behind
         let _ = std::fs::remove_file(&req.output);
-        Err(if code.is_none() && !errored {
+        Err(if was_cancelled {
             "export cancelled".into()
         } else {
             format!("ffmpeg failed: {}", stderr_tail.join("\n"))
@@ -154,7 +160,9 @@ pub async fn export_clip(
 
 #[tauri::command]
 pub fn cancel_export(state: tauri::State<'_, ExportState>) {
-    if let Some(child) = state.0.lock().unwrap().child.take() {
+    let mut slot = state.0.lock().unwrap();
+    if let Some(child) = slot.child.take() {
+        slot.cancelled = true;
         let _ = child.kill();
     }
 }

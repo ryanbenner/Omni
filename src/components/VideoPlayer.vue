@@ -45,35 +45,37 @@ async function onExport(
   replace: boolean,
   newName: string | null,
 ) {
+  const srcPath = props.item.path;
+  const srcName = props.item.name;
   const el = video.value;
   if (!el || exporter.running.value) return;
   el.pause();
-  const dir = parentDir(props.item.path);
-  const sep = sepOf(props.item.path);
-  const stem = props.item.name.replace(/\.[^.]+$/, "");
+  const dir = parentDir(srcPath);
+  const sep = sepOf(srcPath);
+  const stem = srcName.replace(/\.[^.]+$/, "");
   const target = mode === "discord" ? 50 * 1024 * 1024 : undefined;
   try {
     if (!replace) {
       const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
-      const name = newClipName(props.item.name, listing.files.map((f) => f.name));
+      const name = newClipName(srcName, listing.files.map((f) => f.name));
       const output = dir + sep + name;
       exportName.value = name;
-      await runExport({ output, mode, target });
+      await runExport({ input: srcPath, output, mode, target });
       flash(`Saved ${name}`);
       trim.exit();
       emit("clipSaved", output);
     } else {
       const tmp = dir + sep + stem + ".omniexport.tmp.mp4";
-      const finalName = ensureMp4(newName ?? props.item.name);
-      exportName.value = props.item.name;
-      await runExport({ output: tmp, mode, target });
+      const finalName = ensureMp4(newName ?? srcName);
+      exportName.value = srcName;
+      await runExport({ input: srcPath, output: tmp, mode, target });
       // collision check happens before the original is touched, so a bad
       // chosen name can still be aborted with both copies intact
       const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
       const collides = listing.files.some(
         (f) =>
           f.name.toLowerCase() === finalName.toLowerCase() &&
-          f.name.toLowerCase() !== props.item.name.toLowerCase(),
+          f.name.toLowerCase() !== srcName.toLowerCase(),
       );
       if (collides) {
         await invoke("delete_file", { path: tmp }).catch(() => {});
@@ -81,19 +83,22 @@ async function onExport(
         return;
       }
       try {
-        await invoke("delete_file", { path: props.item.path });
+        await invoke("delete_file", { path: srcPath });
+      } catch {
+        // original untouched: keep it, keep the clip, say so plainly
+        flash(`Couldn't replace — original untouched; trimmed clip kept as ${stem}.omniexport.tmp.mp4`);
+        return;
+      }
+      try {
         const newPath = await invoke<string>("rename_file", { path: tmp, newName: finalName });
         flash("Replaced");
         trim.exit();
         emit("clipSaved", newPath);
       } catch {
-        // original is already trashed at this point: tmp is the only copy
-        // left, so never delete it — try to fall back to the freed-up
-        // original name, and if even that fails leave tmp on disk
         try {
           const fallbackPath = await invoke<string>("rename_file", {
             path: tmp,
-            newName: props.item.name,
+            newName: srcName,
           });
           flash("Replaced (kept original name — chosen name was taken)");
           trim.exit();
@@ -111,9 +116,9 @@ async function onExport(
   }
 }
 
-function runExport(o: { output: string; mode: ExportRequest["mode"]; target?: number }) {
+function runExport(o: { input: string; output: string; mode: ExportRequest["mode"]; target?: number }) {
   const req: ExportRequest = {
-    input: props.item.path,
+    input: o.input,
     output: o.output,
     inSec: trim.inSec.value,
     outSec: trim.outSec.value,
@@ -273,6 +278,7 @@ watch(src, () => {
   speed.value = 1;
   speedMenuOpen.value = false;
   clearShuttle();
+  if (exporter.running.value) exporter.cancel();
   trim.exit();
 });
 
