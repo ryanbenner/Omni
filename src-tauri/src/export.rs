@@ -100,7 +100,6 @@ pub async fn export_clip(
 
     let mut stderr_tail: Vec<String> = Vec::new();
     let mut code: Option<i32> = None;
-    let mut errored = false;
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) => {
@@ -123,7 +122,6 @@ pub async fn export_clip(
                 code = payload.code;
             }
             CommandEvent::Error(msg) => {
-                errored = true;
                 stderr_tail.push(msg);
                 if stderr_tail.len() > 20 {
                     stderr_tail.remove(0);
