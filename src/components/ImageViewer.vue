@@ -1,12 +1,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { MediaItem, ViewerAction } from "../types";
 import { useImageTransform } from "../composables/useImageTransform";
+import { canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
+import { parentDir, sepOf } from "../composables/pathUtils";
 
 const props = defineProps<{ item: MediaItem }>();
 
-const src = computed(() => convertFileSrc(props.item.path));
+const cacheBust = ref(0);
+const saveMsg = ref<string | null>(null);
+let msgTimer = 0;
+
+function flash(msg: string) {
+  saveMsg.value = msg;
+  clearTimeout(msgTimer);
+  msgTimer = window.setTimeout(() => (saveMsg.value = null), 4000);
+}
+
+const src = computed(() => {
+  const url = convertFileSrc(props.item.path);
+  return cacheBust.value ? `${url}?v=${cacheBust.value}` : url;
+});
 const failed = ref(false);
 const t = useImageTransform();
 const container = ref<HTMLElement | null>(null);
@@ -42,6 +58,42 @@ function resetView() {
   t.reset();
   t.rotation.value = 0;
   menu.value = null;
+}
+
+const saveEnabled = computed(() =>
+  canSave(extOf(props.item.name), t.rotation.value),
+);
+
+async function doSave() {
+  menu.value = null;
+  if (!saveEnabled.value) return;
+  try {
+    await saveRotated(props.item.path, props.item.path, t.rotation.value);
+    t.rotation.value = 0;
+    cacheBust.value++;
+    flash("Saved");
+  } catch (e) {
+    flash("Save failed: " + e);
+  }
+}
+
+async function doSaveAs() {
+  menu.value = null;
+  try {
+    const dest = await saveDialog({
+      defaultPath:
+        parentDir(props.item.path) + sepOf(props.item.path) + saveAsName(props.item.name),
+    });
+    if (!dest) return;
+    await saveRotated(props.item.path, dest, t.rotation.value);
+    if (dest === props.item.path) {
+      t.rotation.value = 0;
+      cacheBust.value++;
+    }
+    flash("Saved to " + dest);
+  } catch (e) {
+    flash("Save failed: " + e);
+  }
 }
 
 function toggleFullscreen() {
@@ -142,8 +194,19 @@ defineExpose({ handleAction });
       :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
       @pointerdown.stop
     >
+      <button
+        class="menu-item"
+        :disabled="!saveEnabled"
+        :title="saveEnabled ? '' : 'rotate first; jpg/png/webp only'"
+        @click="doSave"
+      >
+        Save
+      </button>
+      <button class="menu-item" @click="doSaveAs">Save As…</button>
+      <div class="menu-sep" />
       <button class="menu-item" @click="resetView">Reset view</button>
     </div>
+    <div v-if="saveMsg" class="save-msg">{{ saveMsg }}</div>
   </div>
 </template>
 
@@ -248,5 +311,30 @@ defineExpose({ handleAction });
 }
 .menu-item:hover {
   background: var(--color-accent-900);
+}
+.menu-item:disabled {
+  color: var(--color-neutral-600);
+  cursor: default;
+}
+.menu-item:disabled:hover {
+  background: none;
+}
+.menu-sep {
+  height: 1px;
+  margin: 2px 6px;
+  background: var(--color-neutral-800);
+}
+.save-msg {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  color: var(--color-accent-200);
+  font-size: 12px;
 }
 </style>

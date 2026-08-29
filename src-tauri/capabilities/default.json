@@ -15,6 +15,15 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "ms-settings:defaultapps" }]
+    },
+    "dialog:allow-save",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }]
     }
   ]
 }
