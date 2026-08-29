@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 
-const ENCODABLE = ["jpg", "jpeg", "png", "webp"];
+export const ENCODABLE = ["jpg", "jpeg", "png", "webp"];
 
 export function extOf(name: string): string {
   const i = name.lastIndexOf(".");

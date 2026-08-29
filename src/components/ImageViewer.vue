@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { MediaItem, ViewerAction } from "../types";
 import { useImageTransform } from "../composables/useImageTransform";
-import { canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
+import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
 import { parentDir, sepOf } from "../composables/pathUtils";
 
 const props = defineProps<{ item: MediaItem }>();
@@ -80,9 +80,12 @@ async function doSave() {
 async function doSaveAs() {
   menu.value = null;
   try {
+    const srcExt = extOf(props.item.name);
+    const outExt = ENCODABLE.includes(srcExt) ? srcExt : "png";
     const dest = await saveDialog({
       defaultPath:
         parentDir(props.item.path) + sepOf(props.item.path) + saveAsName(props.item.name),
+      filters: [{ name: outExt.toUpperCase() + " image", extensions: [outExt] }],
     });
     if (!dest) return;
     await saveRotated(props.item.path, dest, t.rotation.value);
