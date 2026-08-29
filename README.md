@@ -1,6 +1,6 @@
 # Media Viewer
 
-Lightweight Windows media viewer for gaming clips and photos. Tauri 2 + Vue 3.
+Multiuse Windows media viewer for videos and photos. Tauri 2 + Vue 3.
 
 ## Getting the Windows installer
 
