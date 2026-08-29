@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import Titlebar from "./components/Titlebar.vue";
 import Viewer from "./components/Viewer.vue";
 import Sidebar from "./components/Sidebar.vue";
 import { useMediaList } from "./composables/useMediaList";
 import { useKeyboard } from "./composables/useKeyboard";
+import { parentDir } from "./composables/pathUtils";
 import type { Command } from "./composables/keymap";
 
 const list = useMediaList();
 const viewer = ref<InstanceType<typeof Viewer> | null>(null);
 const sidebarOpen = ref(true);
+
+const currentFolder = computed(() =>
+  list.current.value ? parentDir(list.current.value.path) : null,
+);
 
 function applyApp(action: { type: "prevFile" | "nextFile" }) {
   if (action.type === "prevFile") list.prev();
@@ -65,96 +71,114 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
 
 <template>
   <main class="app">
-    <Sidebar
-      v-if="sidebarOpen"
-      :current-path="list.current.value?.path ?? null"
-      @open-file="list.openFile"
-    />
-    <div class="stage">
-      <button
-        v-if="list.items.value.length"
-        class="sidebar-toggle"
-        :title="sidebarOpen ? 'Hide file list' : 'Show file list'"
-        @click="sidebarOpen = !sidebarOpen"
-      >
-        {{ sidebarOpen ? "«" : "»" }}
-      </button>
-      <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />
-      <template v-if="list.items.value.length > 1">
-        <button
-          class="nav-arrow nav-prev"
-          :disabled="list.currentIndex.value === 0"
-          title="Previous file"
-          @click="navClick(-1, $event)"
-        >
-          &lt;
-        </button>
-        <button
-          class="nav-arrow nav-next"
-          :disabled="list.currentIndex.value === list.items.value.length - 1"
-          title="Next file"
-          @click="navClick(1, $event)"
-        >
-          &gt;
-        </button>
-      </template>
-      <div v-else class="empty">
-        <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
-        <p v-else class="empty-hint">
-          No file loaded. Open a video or image with Media Viewer
-          (right-click a file, then "Open with").
-        </p>
-        <button class="ctl settings-btn" @click="openDefaultApps">
-          Set as default in Windows Settings
-        </button>
+    <Titlebar :sidebar-open="sidebarOpen" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
+    <div class="body-row">
+      <Sidebar
+        v-if="sidebarOpen"
+        :current-path="list.current.value?.path ?? null"
+        :current-folder="currentFolder"
+        @open-file="list.openFile"
+      />
+      <div class="stage">
+        <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />
+        <div v-else class="empty">
+          <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>
+          <p v-else class="empty-hint">
+            No file loaded. Open a video or image with Media Viewer (right-click a
+            file, then "Open with") — or browse the file tree on the left.
+          </p>
+          <button class="settings-btn" @click="openDefaultApps">
+            Set as default in Windows Settings
+          </button>
+        </div>
+        <template v-if="list.items.value.length > 1">
+          <button
+            class="paddle paddle-prev"
+            :disabled="list.currentIndex.value === 0"
+            title="Previous file"
+            @click="navClick(-1, $event)"
+          >
+            <i class="ph ph-caret-left" />
+          </button>
+          <button
+            class="paddle paddle-next"
+            :disabled="list.currentIndex.value === list.items.value.length - 1"
+            title="Next file"
+            @click="navClick(1, $event)"
+          >
+            <i class="ph ph-caret-right" />
+          </button>
+        </template>
       </div>
     </div>
   </main>
 </template>
 
 <style>
-:root {
-  color-scheme: dark;
-}
-body {
-  margin: 0;
-  background: #111;
-  color: #ddd;
-  font-family: system-ui, sans-serif;
-  overflow: hidden;
-}
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+  background: var(--color-bg);
+}
+.body-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 .stage {
   position: relative;
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0f0f0f;
 }
-.sidebar-toggle {
+.paddle {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 10;
-  background: #222a;
-  color: #ddd;
-  border: 1px solid #444;
-  border-radius: 4px;
-  width: 28px;
-  height: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 40px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #1a1a1a99;
+  border: 1px solid var(--color-neutral-900);
+  color: var(--color-neutral-400);
   cursor: pointer;
+  opacity: 0.5;
+  backdrop-filter: blur(4px);
+  font-size: 20px;
+  transition: opacity 0.15s;
+}
+.paddle:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--color-accent-300);
+  border-color: var(--color-accent-700);
+}
+.paddle:disabled {
+  opacity: 0.12;
+  cursor: default;
+}
+.paddle-prev {
+  left: 14px;
+}
+.paddle-next {
+  right: 14px;
 }
 .empty {
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2rem;
   text-align: center;
 }
 .empty-hint {
-  color: #777;
+  color: var(--color-neutral-600);
   max-width: 48ch;
 }
 .error-text {
@@ -162,41 +186,15 @@ body {
 }
 .settings-btn {
   margin-top: 1rem;
-  background: #222;
-  color: #ddd;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 0.4rem 0.8rem;
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 0.4rem 0.9rem;
   cursor: pointer;
+  font-family: var(--font-body);
 }
-.nav-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 40px;
-  height: 64px;
-  background: #0006;
-  color: #ddd;
-  border: none;
-  border-radius: 6px;
-  font-size: 26px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.35;
-  transition: opacity 0.15s;
-}
-.nav-arrow:hover {
-  opacity: 0.9;
-}
-.nav-arrow:disabled {
-  opacity: 0.1;
-  cursor: default;
-}
-.nav-prev {
-  left: 10px;
-}
-.nav-next {
-  right: 10px;
+.settings-btn:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 </style>

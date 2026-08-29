@@ -3,7 +3,7 @@ import { onUnmounted, ref, watch } from "vue";
 import { useFileTree } from "../composables/useFileTree";
 import type { Pin } from "../types";
 
-const props = defineProps<{ currentPath: string | null }>();
+const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
 const emit = defineEmits<{ openFile: [path: string] }>();
 
 const tree = useFileTree((p) => emit("openFile", p));
@@ -121,7 +121,7 @@ function pinClick(pin: Pin) {
 
     <div class="footer">
       <i class="ph ph-hard-drives" />
-      <span class="footer-path">{{ currentPath ?? "No file open" }}</span>
+      <span class="footer-path">{{ currentFolder ?? "No file open" }}</span>
     </div>
 
     <div
