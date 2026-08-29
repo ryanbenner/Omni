@@ -100,17 +100,45 @@ describe("useFileTree", () => {
     expect(tree2.pins.value).toHaveLength(0);
   });
 
-  it("pinClick expands the pinned folder and its ancestors, refreshing count", async () => {
+  it("pinClick scopes the tree to drive plus pinned folder, skipping ancestors", async () => {
     const tree = useFileTree(() => {});
     await tree.init();
     await tree.addPin("C:\\Users", "Users");
-    expect(tree.pins.value[0].count).toBe(1);
     await tree.pinClick(tree.pins.value[0]);
+    expect(tree.rows.value).toEqual([
+      expect.objectContaining({ path: "C:\\", kind: "drive", depth: 0, open: false }),
+      expect.objectContaining({ path: "C:\\Users", kind: "folder", depth: 1, open: true }),
+      expect.objectContaining({ path: "C:\\Users\\pic.jpg", kind: "file", depth: 2 }),
+    ]);
+    expect(tree.scope.value?.path).toBe("C:\\Users");
+    expect(tree.pins.value[0].count).toBe(1);
+  });
+
+  it("clearScope returns to the full tree with prior expansions intact", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\"); // expand drive in full view first
+    await tree.addPin("C:\\Users", "Users");
+    await tree.pinClick(tree.pins.value[0]);
+    tree.clearScope();
+    expect(tree.scope.value).toBeNull();
+    // full view returns; the pinned folder stays expanded from the scoped visit
     expect(tree.rows.value.map((r) => r.path)).toEqual([
       "C:\\",
       "C:\\Users",
       "C:\\Users\\pic.jpg",
     ]);
-    expect(tree.pins.value[0].count).toBe(1);
+  });
+
+  it("reveal inside the scope keeps it; reveal outside clears it", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Users", "Users");
+    await tree.pinClick(tree.pins.value[0]);
+    await tree.reveal("C:\\Users\\pic.jpg");
+    expect(tree.scope.value?.path).toBe("C:\\Users");
+    await tree.reveal("C:\\stray.mp4"); // outside the pinned folder
+    expect(tree.scope.value).toBeNull();
+    expect(tree.rows.value[0]).toMatchObject({ path: "C:\\", kind: "drive" });
   });
 });

@@ -47,6 +47,21 @@ export function useFileTree(openFile: (path: string) => void) {
   const currentPath = ref<string | null>(null);
   const pins = ref<Pin[]>([]);
   const version = ref(0); // bumped on any node mutation so rows recompute
+  // when set, the tree shows only the pin's drive plus the pin as root
+  const scope = ref<Pin | null>(null);
+
+  // separator-aware containment so "C:\Users" does not match "C:\UsersX"
+  function isWithin(child: string, parent: string): boolean {
+    const c = child.toLowerCase();
+    const p = parent.toLowerCase();
+    if (c === p) return true;
+    const sep = parent.includes("\\") ? "\\" : "/";
+    return c.startsWith(p.endsWith(sep) ? p : p + sep);
+  }
+
+  function driveOf(path: string): DriveInfo | null {
+    return roots.value.find((d) => isWithin(path, d.path)) ?? null;
+  }
 
   function node(path: string): NodeState {
     let n = nodes.value.get(path);
@@ -88,6 +103,24 @@ export function useFileTree(openFile: (path: string) => void) {
   }
 
   async function reveal(filePath: string) {
+    const s = scope.value;
+    if (s) {
+      if (isWithin(filePath, s.path)) {
+        // expand only within the scoped folder
+        for (const dir of ancestorDirs(filePath)) {
+          if (!isWithin(dir, s.path)) continue;
+          const n = node(dir);
+          if (!n.open) {
+            await load(dir);
+            n.open = true;
+          }
+        }
+        version.value++;
+        return;
+      }
+      // file lives outside the scoped folder: drop back to the full tree
+      scope.value = null;
+    }
     for (const dir of ancestorDirs(filePath)) {
       const n = node(dir);
       if (!n.open) {
@@ -132,20 +165,16 @@ export function useFileTree(openFile: (path: string) => void) {
   }
 
   async function pinClick(pin: Pin) {
-    // reveal the pinned folder in the tree and refresh its count.
-    // appending a fake child lets ancestordirs yield the pin's own chain
-    const sep = pin.path.includes("\\") ? "\\" : "/";
-    const fakeChild = pin.path.endsWith(sep) ? pin.path + "x" : pin.path + sep + "x";
-    for (const dir of ancestorDirs(fakeChild)) {
-      const n = node(dir);
-      if (!n.open) {
-        await load(dir);
-        n.open = true;
-      }
-    }
+    // scope the tree to the pin: its drive on top, the pin as expanded root
+    scope.value = pin;
     await load(pin.path);
     node(pin.path).open = true;
     refreshPinCount(pin.path);
+    version.value++;
+  }
+
+  function clearScope() {
+    scope.value = null;
     version.value++;
   }
 
@@ -184,6 +213,25 @@ export function useFileTree(openFile: (path: string) => void) {
     void version.value;
     void currentPath.value;
     const out: TreeRow[] = [];
+    const s = scope.value;
+    if (s) {
+      const drive = driveOf(s.path);
+      if (drive) {
+        // collapsed drive row doubles as the way back to the full tree
+        out.push({
+          path: drive.path,
+          name: drive.name,
+          label: drive.name,
+          kind: "drive",
+          depth: 0,
+          guides: 0,
+          open: false,
+          selected: false,
+        });
+      }
+      walk(s.path, s.name, "folder", drive ? 1 : 0, out);
+      return out;
+    }
     for (const d of roots.value) walk(d.path, d.name, "drive", 0, out);
     return out;
   });
@@ -191,6 +239,7 @@ export function useFileTree(openFile: (path: string) => void) {
   return {
     rows,
     pins,
+    scope,
     init,
     toggle,
     reveal,
@@ -199,6 +248,7 @@ export function useFileTree(openFile: (path: string) => void) {
     removePin,
     isPinned,
     pinClick,
+    clearScope,
     openFile,
   };
 }

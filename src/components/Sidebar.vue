@@ -40,9 +40,22 @@ watch(menu, (m) => {
 
 onUnmounted(() => window.removeEventListener("pointerdown", closeMenu));
 
-function rowClick(row: { kind: string; path: string }) {
-  if (row.kind === "file") emit("openFile", row.path);
-  else tree.toggle(row.path);
+async function rowClick(row: { kind: string; path: string }) {
+  if (row.kind === "file") {
+    emit("openFile", row.path);
+    return;
+  }
+  // in a pin-scoped view the drive row is the way back to the full tree
+  if (row.kind === "drive" && tree.scope.value) {
+    tree.clearScope();
+    if (props.currentPath) {
+      await tree.reveal(props.currentPath);
+      await nextTick();
+      root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
+    }
+    return;
+  }
+  tree.toggle(row.path);
 }
 
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
