@@ -85,9 +85,9 @@ function clearShuttle() {
 function setSpeed(v: number) {
   speed.value = v;
   const el = video.value;
-  // shuttle owns playbackRate while active; it restores speed via priorrate
+  // shuttle owns playbackRate while active; restore lands on the new choice
   if (el && shuttle.value === null) el.playbackRate = v;
-  if (shuttle.value === null) priorRate = v;
+  priorRate = v;
 }
 
 function chipClick() {
