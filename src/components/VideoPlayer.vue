@@ -91,16 +91,31 @@ function setSpeed(v: number) {
   priorRate = v;
 }
 
-function onSpeedSelect(e: Event) {
-  const el = e.target as HTMLSelectElement;
-  setSpeed(Number(el.value));
-  el.blur();
-}
-
 const chipLabel = computed(() => {
   if (shuttle.value === "fwd") return "0.1x";
   if (shuttle.value === "rev") return "-0.1x";
   return speed.value + "x";
+});
+
+// custom dropdown: the native select popup cannot be styled to match the pill
+const speedMenuOpen = ref(false);
+
+function closeSpeedMenu() {
+  speedMenuOpen.value = false;
+}
+
+function toggleSpeedMenu() {
+  speedMenuOpen.value = !speedMenuOpen.value;
+}
+
+function pickSpeed(s: number) {
+  setSpeed(s);
+  speedMenuOpen.value = false;
+}
+
+watch(speedMenuOpen, (open) => {
+  if (open) window.addEventListener("pointerdown", closeSpeedMenu);
+  else window.removeEventListener("pointerdown", closeSpeedMenu);
 });
 
 
@@ -129,6 +144,7 @@ function hideControls() {
 onUnmounted(() => {
   stopRevLoop();
   clearTimeout(hideTimer);
+  window.removeEventListener("pointerdown", closeSpeedMenu);
 });
 
 watch(src, () => {
@@ -137,6 +153,7 @@ watch(src, () => {
   currentTime.value = 0;
   duration.value = 0;
   speed.value = 1;
+  speedMenuOpen.value = false;
   clearShuttle();
 });
 
@@ -274,7 +291,11 @@ const progress = computed(() =>
         </button>
       </div>
     </div>
-    <div v-if="!failed" class="controls" :class="{ hidden: !controlsVisible }">
+    <div
+      v-if="!failed"
+      class="controls"
+      :class="{ hidden: !controlsVisible && !speedMenuOpen }"
+    >
       <div class="time-row">
         <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
       </div>
@@ -289,19 +310,22 @@ const progress = computed(() =>
           <button class="tbtn" title="Delete file" @click="emit('deleteFile')">
             <i class="ph ph-trash" />
           </button>
-          <span class="speed-chip-wrap">
-            <span class="speed-chip">
+          <span class="speed-chip-wrap" @pointerdown.stop>
+            <button class="speed-chip" title="Playback speed" @click="toggleSpeedMenu">
               <i class="ph ph-gauge" />
               <span>{{ chipLabel }}</span>
-            </span>
-            <select
-              class="speed-select"
-              title="Playback speed"
-              :value="String(speed)"
-              @change="onSpeedSelect"
-            >
-              <option v-for="s in SPEEDS" :key="s" :value="String(s)">{{ s }}x</option>
-            </select>
+            </button>
+            <div v-if="speedMenuOpen" class="speed-menu">
+              <button
+                v-for="s in SPEEDS"
+                :key="s"
+                class="speed-opt"
+                :class="{ active: s === speed }"
+                @click="pickSpeed(s)"
+              >
+                {{ s }}x
+              </button>
+            </div>
           </span>
         </div>
         <button class="tbtn skip" title="Back 10 seconds" @click="seekTen(-1)">
@@ -512,12 +536,45 @@ const progress = computed(() =>
   border-color: var(--color-accent-700);
   color: var(--color-accent-200);
 }
-/* the invisible native select sits on top so the picker opens at the chip */
-.speed-select {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+.speed-chip {
+  background: none;
   cursor: pointer;
+}
+.speed-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  min-width: 68px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #1e1e1ef0;
+  border: 1px solid var(--color-neutral-800);
+  box-shadow: 0 8px 24px #000a;
+  backdrop-filter: blur(8px);
+}
+.speed-opt {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-neutral-300);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-body);
+  text-align: center;
+  cursor: pointer;
+}
+.speed-opt:hover {
+  background: var(--color-neutral-900);
+  color: var(--color-text);
+}
+.speed-opt.active {
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
 }
 .skip .skip-wrap {
   position: relative;
