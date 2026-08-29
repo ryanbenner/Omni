@@ -1,6 +1,7 @@
 # Omni
 
 Multiuse Windows media viewer for videos and photos. Tauri 2 + Vue 3.
+Future plans: turn into an IDE, markdown editor, pdf viewer, document editor, video editing capabilities, and more..
 
 ## Getting the Windows installer
 
