@@ -66,10 +66,9 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
 <template>
   <main class="app">
     <Sidebar
-      v-if="sidebarOpen && list.items.value.length"
-      :items="list.items.value"
-      :current-index="list.currentIndex.value"
-      @select="list.jumpTo"
+      v-if="sidebarOpen"
+      :current-path="list.current.value?.path ?? null"
+      @open-file="list.openFile"
     />
     <div class="stage">
       <button
