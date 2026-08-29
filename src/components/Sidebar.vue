@@ -130,6 +130,17 @@ function refreshDir(dirPath: string) {
 }
 defineExpose({ refreshDir });
 
+async function copyToClipboard() {
+  const m = menu.value;
+  menu.value = null;
+  if (!m) return;
+  try {
+    await invoke("copy_file_to_clipboard", { path: m.path });
+  } catch (e) {
+    await message(String(e), { title: "Copy failed", kind: "error" });
+  }
+}
+
 async function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
@@ -241,6 +252,10 @@ async function deleteFromMenu() {
         </button>
       </template>
       <template v-else>
+        <button class="menu-item" @click="copyToClipboard">
+          <i class="ph ph-copy" />
+          Copy to clipboard
+        </button>
         <button class="menu-item" @click="startRename">
           <i class="ph ph-pencil-simple" />
           Rename

@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { DirListing, MediaItem, ViewerAction } from "../types";
 import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
 import TrimBar from "./TrimBar.vue";
 import ExportPanel from "./ExportPanel.vue";
 import { useTrim } from "../composables/useTrim";
-import { ensureMp4, newClipName, useExport, type ExportRequest } from "../composables/useExport";
+import {
+  CAP_BYTES,
+  ensureMp4,
+  estimateClipBytes,
+  formatMB,
+  newClipName,
+  useExport,
+  type ExportRequest,
+} from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 
 const props = defineProps<{ item: MediaItem }>();
@@ -15,8 +23,71 @@ const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string] }>();
 const trim = useTrim();
 const exporter = useExport();
 const exportName = ref("");
+const capped = ref(false);
 const toast = ref<string | null>(null);
 let toastTimer = 0;
+
+// naming happens up front for both flows; the trim ui hides behind the modal
+const naming = ref<{ replace: boolean; draft: string; error: string } | null>(null);
+const nameInput = ref<HTMLInputElement | null>(null);
+let dirNames: string[] = [];
+
+async function onRequestExport(replace: boolean) {
+  const dir = parentDir(props.item.path);
+  try {
+    const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+    dirNames = listing.files.map((f) => f.name);
+  } catch {
+    dirNames = [];
+  }
+  const draft = replace ? props.item.name : newClipName(props.item.name, dirNames);
+  naming.value = { replace, draft, error: "" };
+  nextTick(() => {
+    const el = nameInput.value;
+    el?.focus();
+    const dot = draft.lastIndexOf(".");
+    el?.setSelectionRange(0, dot > 0 ? dot : draft.length);
+  });
+}
+
+function cancelNaming() {
+  // back out one step: trim state is untouched, keep editing
+  naming.value = null;
+}
+
+function confirmNaming() {
+  const n = naming.value;
+  if (!n) return;
+  const raw = n.draft.trim();
+  if (!raw || raw.includes("/") || raw.includes("\\")) {
+    n.error = "enter a name without slashes";
+    return;
+  }
+  const name = ensureMp4(raw);
+  const self = props.item.name.toLowerCase();
+  const collides = dirNames.some(
+    (x) =>
+      x.toLowerCase() === name.toLowerCase() &&
+      (!n.replace || x.toLowerCase() !== self),
+  );
+  if (collides) {
+    n.error = `${name} already exists`;
+    return;
+  }
+  naming.value = null;
+  onExport(capped.value ? "discord" : "precise", n.replace, name);
+}
+
+const sizeLabel = computed(() => {
+  if (!trim.active.value) return "";
+  const est = estimateClipBytes(props.item.size, trim.duration.value, trim.keptDuration.value);
+  if (est <= 0) return "";
+  if (capped.value && est > CAP_BYTES) {
+    return `~${formatMB(CAP_BYTES)} (capped from ≈${formatMB(est)})`;
+  }
+  if (capped.value) return `≈${formatMB(est)} · under the cap`;
+  return `≈${formatMB(est)}`;
+});
 
 function flash(msg: string) {
   toast.value = msg;
@@ -41,9 +112,9 @@ function onScrub(t: number) {
 }
 
 async function onExport(
-  mode: "fast" | "precise" | "discord",
+  mode: "precise" | "discord",
   replace: boolean,
-  newName: string | null,
+  chosenName: string,
 ) {
   const srcPath = props.item.path;
   const srcName = props.item.name;
@@ -53,20 +124,18 @@ async function onExport(
   const dir = parentDir(srcPath);
   const sep = sepOf(srcPath);
   const stem = srcName.replace(/\.[^.]+$/, "");
-  const target = mode === "discord" ? 50 * 1024 * 1024 : undefined;
+  const target = mode === "discord" ? CAP_BYTES : undefined;
   try {
     if (!replace) {
-      const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
-      const name = newClipName(srcName, listing.files.map((f) => f.name));
-      const output = dir + sep + name;
-      exportName.value = name;
+      const output = dir + sep + chosenName;
+      exportName.value = chosenName;
       await runExport({ input: srcPath, output, mode, target });
-      flash(`Saved ${name}`);
+      flash(`Saved ${chosenName}`);
       trim.exit();
       emit("clipSaved", output);
     } else {
       const tmp = dir + sep + stem + ".omniexport.tmp.mp4";
-      const finalName = ensureMp4(newName ?? srcName);
+      const finalName = chosenName;
       exportName.value = srcName;
       await runExport({ input: srcPath, output: tmp, mode, target });
       // collision check happens before the original is touched, so a bad
@@ -278,6 +347,7 @@ watch(src, () => {
   speed.value = 1;
   speedMenuOpen.value = false;
   clearShuttle();
+  naming.value = null;
   if (exporter.running.value) exporter.cancel();
   trim.exit();
 });
@@ -450,20 +520,26 @@ const progress = computed(() =>
     </div>
     <div
       v-if="!failed"
+      v-show="!naming"
       class="controls"
       :class="{ hidden: !controlsVisible && !speedMenuOpen && !trim.active.value }"
     >
       <ExportPanel
         v-if="trim.active.value"
+        v-model:capped="capped"
         :busy="exporter.running.value"
         :percent="exporter.percent.value"
         :output-name="exportName"
-        :current-name="item.name"
-        @do-export="onExport"
+        @request-export="onRequestExport"
         @cancel-export="exporter.cancel()"
       />
       <template v-if="trim.active.value">
-        <TrimBar :trim="trim" :current-time="currentTime" @scrub="onScrub" />
+        <TrimBar
+          :trim="trim"
+          :current-time="currentTime"
+          :size-label="sizeLabel"
+          @scrub="onScrub"
+        />
       </template>
       <template v-else>
         <div class="time-row">
@@ -542,6 +618,35 @@ const progress = computed(() =>
       </div>
     </div>
     <div v-if="toast" class="export-toast">{{ toast }}</div>
+    <div v-if="naming" class="naming-backdrop" @pointerdown.stop="cancelNaming">
+      <div class="naming-modal" @pointerdown.stop>
+        <div class="modal-title">
+          {{ naming.replace ? "Replace original" : "Save as new clip" }}
+        </div>
+        <p class="modal-hint">
+          {{
+            naming.replace
+              ? "The original moves to the Recycle Bin and the trimmed clip takes this name."
+              : "The trimmed clip is saved next to the original."
+          }}
+        </p>
+        <input
+          ref="nameInput"
+          v-model="naming.draft"
+          class="modal-input"
+          spellcheck="false"
+          @keydown.enter.prevent="confirmNaming"
+          @keydown.esc.prevent="cancelNaming"
+        />
+        <p v-if="naming.error" class="modal-error">{{ naming.error }}</p>
+        <div class="modal-actions">
+          <button class="m-btn-outline" @click="cancelNaming">Cancel</button>
+          <button class="m-btn-primary" @click="confirmNaming">
+            {{ naming.replace ? "Replace" : "Save" }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -823,5 +928,82 @@ const progress = computed(() =>
   border: 1px solid var(--color-neutral-800);
   color: var(--color-accent-200);
   font-size: 12px;
+}
+/* naming modal owns the player while open; trim ui hides behind it */
+.naming-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: #000d;
+  backdrop-filter: blur(3px);
+}
+.naming-modal {
+  width: min(380px, 90%);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  box-shadow: 0 12px 40px #000c;
+}
+.modal-title {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+.modal-hint {
+  font-size: 11.5px;
+  color: var(--color-neutral-500);
+  margin: 0 0 10px;
+}
+.modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-accent-700);
+  background: #121212;
+  color: var(--color-text);
+  font: inherit;
+  outline: none;
+}
+.modal-error {
+  font-size: 11.5px;
+  color: #e08585;
+  margin: 6px 0 0;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.m-btn-primary {
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-100);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.m-btn-primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+.m-btn-outline {
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-neutral-700);
+  background: none;
+  color: var(--color-neutral-300);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.m-btn-outline:hover {
+  border-color: var(--color-accent-700);
+  color: var(--color-accent-200);
 }
 </style>

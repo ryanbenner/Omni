@@ -5,6 +5,7 @@ import { formatTimeTenths, type useTrim } from "../composables/useTrim";
 const props = defineProps<{
   trim: ReturnType<typeof useTrim>;
   currentTime: number;
+  sizeLabel?: string;
 }>();
 const emit = defineEmits<{ scrub: [t: number] }>();
 
@@ -52,7 +53,11 @@ const playheadPct = computed(() => pct(props.currentTime));
 
 <template>
   <div class="trim-wrap">
-    <div class="kept-label">{{ formatTimeTenths(trim.keptDuration.value) }} kept</div>
+    <div class="kept-label">
+      {{ formatTimeTenths(trim.keptDuration.value) }} kept<template v-if="sizeLabel">
+        · {{ sizeLabel }}</template
+      >
+    </div>
     <div
       ref="bar"
       class="trim-bar"

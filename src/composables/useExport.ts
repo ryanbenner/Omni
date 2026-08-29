@@ -29,6 +29,25 @@ export function ensureMp4(name: string): string {
   return `${stem}.mp4`;
 }
 
+export const CAP_BYTES = 50 * 1024 * 1024;
+
+// rough size preview: cq-mode nvenc output tracks the source bitrate, so
+// scale the source size by the kept fraction
+export function estimateClipBytes(
+  sourceBytes: number,
+  sourceDuration: number,
+  keptSeconds: number,
+): number {
+  if (!(sourceBytes > 0) || !(sourceDuration > 0) || !(keptSeconds > 0)) return 0;
+  return Math.round(sourceBytes * Math.min(1, keptSeconds / sourceDuration));
+}
+
+export function formatMB(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  const s = mb >= 100 ? Math.round(mb).toString() : mb.toFixed(1).replace(/\.0$/, "");
+  return `${s} MB`;
+}
+
 export function useExport() {
   const running = ref(false);
   const percent = ref(0);

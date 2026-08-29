@@ -15,11 +15,11 @@ const rootListing: DirListing = {
 };
 const usersListing: DirListing = {
   folders: [],
-  files: [{ path: "C:\\Users\\pic.jpg", kind: "image", name: "pic.jpg", mtime: 1 }],
+  files: [{ path: "C:\\Users\\pic.jpg", kind: "image", name: "pic.jpg", mtime: 1, size: 0 }],
 };
 const gamesListing: DirListing = {
   folders: [],
-  files: [{ path: "C:\\Games\\v.mp4", kind: "video", name: "v.mp4", mtime: 2 }],
+  files: [{ path: "C:\\Games\\v.mp4", kind: "video", name: "v.mp4", mtime: 2, size: 0 }],
 };
 
 function wire() {

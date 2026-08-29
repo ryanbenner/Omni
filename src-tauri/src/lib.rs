@@ -31,6 +31,7 @@ pub fn run() {
             browse::read_dir_entries,
             browse::delete_file,
             browse::rename_file,
+            browse::copy_file_to_clipboard,
             export::export_clip,
             export::cancel_export
         ])

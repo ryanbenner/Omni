@@ -82,6 +82,20 @@ pub fn read_dir_entries(path: String) -> Result<DirListing, String> {
 }
 
 #[tauri::command]
+pub fn copy_file_to_clipboard(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use clipboard_win::{formats, set_clipboard};
+        set_clipboard(formats::FileList, &[path.as_str()]).map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("copy to clipboard is available on windows only".into())
+    }
+}
+
+#[tauri::command]
 pub fn delete_file(path: String) -> Result<(), String> {
     // recycle bin / trash, never a permanent delete
     trash::delete(&path).map_err(|e| e.to_string())

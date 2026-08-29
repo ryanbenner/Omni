@@ -12,6 +12,7 @@ pub struct MediaItem {
     pub kind: String,
     pub name: String,
     pub mtime: u64,
+    pub size: u64,
 }
 
 #[derive(Serialize, Debug)]
@@ -42,18 +43,20 @@ pub fn media_item_from_entry(entry: &std::fs::DirEntry) -> Option<MediaItem> {
         return None;
     }
     let kind = kind_for(&p)?;
-    let mtime = entry
-        .metadata()
-        .ok()
+    let meta = entry.metadata().ok();
+    let mtime = meta
+        .as_ref()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
     Some(MediaItem {
         path: p.to_string_lossy().into_owned(),
         kind: kind.to_string(),
         name: entry.file_name().to_string_lossy().into_owned(),
         mtime,
+        size,
     })
 }
 
@@ -96,6 +99,7 @@ mod tests {
             kind: "video".into(),
             name: name.into(),
             mtime,
+            size: 0,
         }
     }
 

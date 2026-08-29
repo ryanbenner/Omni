@@ -12,9 +12,9 @@ import type { ScanResult } from "../../types";
 
 const scanResult: ScanResult = {
   items: [
-    { path: "/f/new.mp4", kind: "video", name: "new.mp4", mtime: 300 },
-    { path: "/f/mid.jpg", kind: "image", name: "mid.jpg", mtime: 200 },
-    { path: "/f/old.png", kind: "image", name: "old.png", mtime: 100 },
+    { path: "/f/new.mp4", kind: "video", name: "new.mp4", mtime: 300, size: 0 },
+    { path: "/f/mid.jpg", kind: "image", name: "mid.jpg", mtime: 200, size: 0 },
+    { path: "/f/old.png", kind: "image", name: "old.png", mtime: 100, size: 0 },
   ],
   startIndex: 1,
 };

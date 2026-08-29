@@ -12,7 +12,35 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
-import { newClipName, ensureMp4, useExport } from "../useExport";
+import {
+  CAP_BYTES,
+  ensureMp4,
+  estimateClipBytes,
+  formatMB,
+  newClipName,
+  useExport,
+} from "../useExport";
+
+describe("estimateClipBytes", () => {
+  it("scales the source size by the kept fraction", () => {
+    expect(estimateClipBytes(100 * 1024 * 1024, 60, 30)).toBe(50 * 1024 * 1024);
+    expect(estimateClipBytes(100, 10, 2.5)).toBe(25);
+  });
+  it("guards zero and nonsense inputs", () => {
+    expect(estimateClipBytes(0, 60, 30)).toBe(0);
+    expect(estimateClipBytes(100, 0, 30)).toBe(0);
+    expect(estimateClipBytes(100, 60, 0)).toBe(0);
+    expect(estimateClipBytes(100, 60, 90)).toBe(100); // kept clamps at whole clip
+  });
+});
+
+describe("formatMB", () => {
+  it("formats with one decimal, trimming .0, rounding at 100+", () => {
+    expect(formatMB(CAP_BYTES)).toBe("50 MB");
+    expect(formatMB(12.34 * 1024 * 1024)).toBe("12.3 MB");
+    expect(formatMB(123.6 * 1024 * 1024)).toBe("124 MB");
+  });
+});
 
 describe("newClipName", () => {
   it("appends _clip.mp4 and dodges collisions case-insensitively", () => {

@@ -3,6 +3,7 @@ export interface MediaItem {
   kind: "video" | "image";
   name: string;
   mtime: number;
+  size: number;
 }
 
 export interface ScanResult {

@@ -14,12 +14,14 @@ const videoItem: MediaItem = {
   kind: "video",
   name: "a.mp4",
   mtime: 1,
+  size: 0,
 };
 const imageItem: MediaItem = {
   path: "/f/b.jpg",
   kind: "image",
   name: "b.jpg",
   mtime: 2,
+  size: 0,
 };
 
 describe("Viewer", () => {
