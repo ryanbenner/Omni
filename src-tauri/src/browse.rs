@@ -81,10 +81,56 @@ pub fn read_dir_entries(path: String) -> Result<DirListing, String> {
     Ok(DirListing { folders, files })
 }
 
+#[tauri::command]
+pub fn delete_file(path: String) -> Result<(), String> {
+    // recycle bin / trash, never a permanent delete
+    trash::delete(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
+    if new_name.is_empty() || new_name.contains('/') || new_name.contains('\\') {
+        return Err("invalid file name".into());
+    }
+    let p = std::path::Path::new(&path);
+    let dir = p.parent().ok_or("file has no parent directory")?;
+    let dest = dir.join(&new_name);
+    if dest.exists() {
+        return Err(format!("{new_name} already exists"));
+    }
+    std::fs::rename(p, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::{create_dir, File};
+
+    #[test]
+    fn rename_moves_within_the_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("old.mp4");
+        File::create(&src).unwrap();
+        let out = rename_file(src.to_string_lossy().into_owned(), "new.mp4".into()).unwrap();
+        assert!(out.ends_with("new.mp4"));
+        assert!(dir.path().join("new.mp4").exists());
+        assert!(!src.exists());
+    }
+
+    #[test]
+    fn rename_rejects_bad_names_and_collisions() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("a.mp4");
+        File::create(&src).unwrap();
+        File::create(dir.path().join("b.mp4")).unwrap();
+        let s = src.to_string_lossy().into_owned();
+        assert!(rename_file(s.clone(), "".into()).is_err());
+        assert!(rename_file(s.clone(), "x/y.mp4".into()).is_err());
+        assert!(rename_file(s.clone(), "x\\y.mp4".into()).is_err());
+        assert!(rename_file(s, "b.mp4".into()).is_err());
+        assert!(src.exists()); // untouched after every rejection
+    }
 
     #[test]
     fn drives_never_empty() {

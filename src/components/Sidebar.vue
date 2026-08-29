@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import { ask, message } from "@tauri-apps/plugin-dialog";
 import { useFileTree } from "../composables/useFileTree";
+import { parentDir } from "../composables/pathUtils";
 import type { Pin } from "../types";
 
 const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
-const emit = defineEmits<{ openFile: [path: string] }>();
+const emit = defineEmits<{
+  openFile: [path: string];
+  fileDeleted: [path: string];
+  fileRenamed: [oldPath: string, newPath: string, newName: string];
+}>();
 
 const tree = useFileTree((p) => emit("openFile", p));
 tree.init().then(() => {
@@ -26,7 +33,13 @@ watch(
   { immediate: true },
 );
 
-const menu = ref<{ x: number; y: number; path: string; name: string } | null>(null);
+const menu = ref<{
+  x: number;
+  y: number;
+  path: string;
+  name: string;
+  kind: string;
+} | null>(null);
 
 function closeMenu() {
   menu.value = null;
@@ -59,9 +72,9 @@ async function rowClick(row: { kind: string; path: string }) {
 }
 
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
-  if (row.kind === "file") return;
+  if (row.kind === "drive") return;
   e.preventDefault();
-  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name };
+  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind };
 }
 
 function togglePinFromMenu() {
@@ -74,6 +87,59 @@ function togglePinFromMenu() {
 
 function pinClick(pin: Pin) {
   tree.pinClick(pin);
+}
+
+const renaming = ref<{ path: string; name: string; draft: string } | null>(null);
+
+function startRename() {
+  const m = menu.value;
+  menu.value = null;
+  if (!m) return;
+  renaming.value = { path: m.path, name: m.name, draft: m.name };
+  nextTick(() => {
+    const input = root.value?.querySelector<HTMLInputElement>(".rename-input");
+    input?.focus();
+    // preselect the stem so typing replaces the name but keeps the extension
+    const dot = (renaming.value?.draft ?? "").lastIndexOf(".");
+    input?.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+  });
+}
+
+function cancelRename() {
+  renaming.value = null;
+}
+
+async function commitRename() {
+  const r = renaming.value;
+  renaming.value = null;
+  if (!r) return;
+  const newName = r.draft.trim();
+  if (!newName || newName === r.name) return;
+  try {
+    const newPath = await invoke<string>("rename_file", { path: r.path, newName });
+    await tree.refresh(parentDir(r.path));
+    emit("fileRenamed", r.path, newPath, newName);
+  } catch (e) {
+    await message(String(e), { title: "Rename failed", kind: "error" });
+  }
+}
+
+async function deleteFromMenu() {
+  const m = menu.value;
+  menu.value = null;
+  if (!m) return;
+  const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
+    title: "Delete file",
+    kind: "warning",
+  });
+  if (!yes) return;
+  try {
+    await invoke("delete_file", { path: m.path });
+    await tree.refresh(parentDir(m.path));
+    emit("fileDeleted", m.path);
+  } catch (e) {
+    await message(String(e), { title: "Delete failed", kind: "error" });
+  }
 }
 </script>
 
@@ -133,7 +199,20 @@ function pinClick(pin: Pin) {
             />
           </span>
         </template>
-        <span class="row-name" :class="{ rtl: row.kind === 'file' }">{{ row.label }}</span>
+        <input
+          v-if="renaming && renaming.path === row.path"
+          v-model="renaming.draft"
+          class="rename-input"
+          spellcheck="false"
+          @keydown.enter.prevent="commitRename"
+          @keydown.esc.prevent="cancelRename"
+          @blur="cancelRename"
+          @click.stop
+          @pointerdown.stop
+        />
+        <span v-else class="row-name" :class="{ rtl: row.kind === 'file' }">{{
+          row.label
+        }}</span>
         <span v-if="row.selected" class="sel-bar" />
       </div>
     </div>
@@ -149,9 +228,22 @@ function pinClick(pin: Pin) {
       :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
       @pointerdown.stop
     >
-      <button class="menu-item" @click="togglePinFromMenu">
-        {{ tree.isPinned(menu.path) ? "Unpin folder" : "Pin folder" }}
-      </button>
+      <template v-if="menu.kind === 'folder'">
+        <button class="menu-item" @click="togglePinFromMenu">
+          <i class="ph ph-push-pin" />
+          {{ tree.isPinned(menu.path) ? "Unpin folder" : "Pin folder" }}
+        </button>
+      </template>
+      <template v-else>
+        <button class="menu-item" @click="startRename">
+          <i class="ph ph-pencil-simple" />
+          Rename
+        </button>
+        <button class="menu-item" @click="deleteFromMenu">
+          <i class="ph ph-trash" />
+          Delete
+        </button>
+      </template>
     </div>
   </aside>
 </template>
@@ -310,18 +402,37 @@ function pinClick(pin: Pin) {
   box-shadow: 0 4px 12px #0008;
 }
 .menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
   background: none;
   border: none;
   color: var(--color-text);
-  padding: 0.35rem 1rem;
+  padding: 0.35rem 1rem 0.35rem 0.7rem;
   text-align: left;
   cursor: pointer;
   border-radius: 3px;
   font-size: 12px;
 }
+.menu-item i {
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
 .menu-item:hover {
   background: var(--color-accent-900);
+}
+.rename-input {
+  min-width: 0;
+  flex: 1;
+  height: 20px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text);
+  background: #121212;
+  border: 1px solid var(--color-accent-700);
+  border-radius: 3px;
+  outline: none;
 }
 </style>

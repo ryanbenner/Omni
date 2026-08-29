@@ -37,6 +37,24 @@ export function useMediaList() {
     jumpTo(currentIndex.value - 1);
   }
 
+  function removeItem(path: string) {
+    const i = items.value.findIndex((it) => it.path === path);
+    if (i === -1) return;
+    items.value.splice(i, 1);
+    // keep the index pointing at a real item; the file after the removed
+    // one slides into its slot, so only clamp at the tail
+    if (currentIndex.value > i || currentIndex.value >= items.value.length) {
+      currentIndex.value = Math.max(0, Math.min(currentIndex.value - 1, items.value.length - 1));
+    }
+  }
+
+  function renameItem(oldPath: string, newPath: string, newName: string) {
+    const it = items.value.find((x) => x.path === oldPath);
+    if (!it) return;
+    it.path = newPath;
+    it.name = newName;
+  }
+
   // preload immediate image neighbors for instant flipping; large 4k
   // screenshots make preloading beyond +-1 too expensive, and videos
   // must never be preloaded
@@ -49,5 +67,16 @@ export function useMediaList() {
     }
   });
 
-  return { items, currentIndex, current, error, openFile, next, prev, jumpTo };
+  return {
+    items,
+    currentIndex,
+    current,
+    error,
+    openFile,
+    next,
+    prev,
+    jumpTo,
+    removeItem,
+    renameItem,
+  };
 }

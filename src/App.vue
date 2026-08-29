@@ -78,6 +78,8 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
         :current-path="list.current.value?.path ?? null"
         :current-folder="currentFolder"
         @open-file="list.openFile"
+        @file-deleted="list.removeItem"
+        @file-renamed="list.renameItem"
       />
       <div class="stage">
         <Viewer v-if="list.current.value" ref="viewer" :item="list.current.value" />

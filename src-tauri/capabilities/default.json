@@ -17,6 +17,8 @@
       "allow": [{ "url": "ms-settings:defaultapps" }]
     },
     "dialog:allow-save",
+    "dialog:allow-ask",
+    "dialog:allow-message",
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**" }]

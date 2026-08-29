@@ -22,7 +22,8 @@ const scanResult: ScanResult = {
 describe("useMediaList", () => {
   beforeEach(() => {
     invokeMock.mockReset();
-    invokeMock.mockResolvedValue(scanResult);
+    // clone per call so tests that mutate items cannot bleed into each other
+    invokeMock.mockImplementation(() => Promise.resolve(structuredClone(scanResult)));
   });
 
   it("openFile scans and lands on the launched file", async () => {
@@ -79,5 +80,31 @@ describe("useMediaList", () => {
     await list.openFile("/bad");
     expect(list.error.value).toContain("cannot open");
     expect(list.items.value).toHaveLength(0);
+  });
+
+  it("removeItem drops the entry and keeps a valid current", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg"); // lands on index 1 of 3
+    list.removeItem("/f/mid.jpg");
+    expect(list.items.value.map((i) => i.name)).toEqual(["new.mp4", "old.png"]);
+    expect(list.current.value?.name).toBe("old.png"); // next file takes its place
+    list.removeItem("/f/old.png");
+    expect(list.current.value?.name).toBe("new.mp4"); // clamped back from the end
+    list.removeItem("/f/new.mp4");
+    expect(list.current.value).toBeNull();
+    list.removeItem("/f/ghost.mp4"); // unknown path is a no-op
+    expect(list.items.value).toHaveLength(0);
+  });
+
+  it("renameItem updates path and name in place", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    list.renameItem("/f/mid.jpg", "/f/renamed.jpg", "renamed.jpg");
+    expect(list.current.value).toMatchObject({
+      path: "/f/renamed.jpg",
+      name: "renamed.jpg",
+    });
+    list.renameItem("/f/ghost.mp4", "/f/x.mp4", "x.mp4"); // no-op
+    expect(list.items.value).toHaveLength(3);
   });
 });

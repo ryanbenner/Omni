@@ -25,7 +25,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scan::scan_media,
             browse::list_drives,
-            browse::read_dir_entries
+            browse::read_dir_entries,
+            browse::delete_file,
+            browse::rename_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

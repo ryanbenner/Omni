@@ -183,6 +183,18 @@ export function useFileTree(openFile: (path: string) => void) {
     version.value++;
   }
 
+  // re-read a directory after a file was deleted or renamed inside it
+  async function refresh(dirPath: string) {
+    const n = nodes.value.get(dirPath);
+    if (n) {
+      n.loaded = false;
+      n.listing = null;
+      if (n.open) await load(dirPath);
+    }
+    if (isPinned(dirPath)) refreshPinCount(dirPath);
+    version.value++;
+  }
+
   function walk(path: string, name: string, kind: "drive" | "folder", depth: number, out: TreeRow[]) {
     const n = node(path);
     out.push({
@@ -254,6 +266,7 @@ export function useFileTree(openFile: (path: string) => void) {
     isPinned,
     pinClick,
     clearScope,
+    refresh,
     openFile,
   };
 }
