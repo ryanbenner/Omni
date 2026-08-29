@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onUnmounted, ref, watch } from "vue";
 import { useFileTree } from "../composables/useFileTree";
 import type { Pin } from "../types";
 
@@ -20,12 +20,24 @@ watch(
   { immediate: true },
 );
 
+const menu = ref<{ x: number; y: number; path: string; name: string } | null>(null);
+
+function closeMenu() {
+  menu.value = null;
+}
+
+watch(menu, (m) => {
+  // window-level listener so clicking anywhere (stage included) dismisses
+  if (m) window.addEventListener("pointerdown", closeMenu);
+  else window.removeEventListener("pointerdown", closeMenu);
+});
+
+onUnmounted(() => window.removeEventListener("pointerdown", closeMenu));
+
 function rowClick(row: { kind: string; path: string }) {
   if (row.kind === "file") emit("openFile", row.path);
   else tree.toggle(row.path);
 }
-
-const menu = ref<{ x: number; y: number; path: string; name: string } | null>(null);
 
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
   if (row.kind === "file") return;
@@ -47,7 +59,7 @@ function pinClick(pin: Pin) {
 </script>
 
 <template>
-  <aside class="sidebar" @pointerdown="menu = null">
+  <aside class="sidebar">
     <div class="scroll">
       <template v-if="tree.pins.value.length">
         <div class="section-label">PINNED</div>
