@@ -39,8 +39,8 @@ function openRename() {
 
 function confirmReplace() {
   const name = draft.value.trim();
-  renameOpen.value = false;
   if (!name) return;
+  renameOpen.value = false;
   emit("doExport", effectiveMode(), true, name);
 }
 </script>
