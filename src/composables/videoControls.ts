@@ -1,11 +1,5 @@
 export const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 
-export function cycleSpeed(current: number): number {
-  const idx = SPEEDS.indexOf(current);
-  if (idx === -1) return 1;
-  return SPEEDS[(idx + 1) % SPEEDS.length];
-}
-
 export function clampTime(t: number, duration: number): number {
   const d = Number.isFinite(duration) ? duration : 0;
   return Math.min(d, Math.max(0, t));

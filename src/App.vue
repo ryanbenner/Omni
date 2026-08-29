@@ -61,12 +61,6 @@ function openDefaultApps() {
   openUrl("ms-settings:defaultapps").catch(() => {});
 }
 
-function navClick(dir: -1 | 1, e: MouseEvent) {
-  if (dir === -1) list.prev();
-  else list.next();
-  // drop focus so space keeps controlling the video, not this button
-  (e.currentTarget as HTMLElement).blur();
-}
 </script>
 
 <template>
@@ -94,24 +88,6 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
             Set Default
           </button>
         </div>
-        <template v-if="list.items.value.length > 1">
-          <button
-            class="paddle paddle-prev"
-            :disabled="list.currentIndex.value === 0"
-            title="Previous file"
-            @click="navClick(-1, $event)"
-          >
-            <i class="ph ph-caret-left" />
-          </button>
-          <button
-            class="paddle paddle-next"
-            :disabled="list.currentIndex.value === list.items.value.length - 1"
-            title="Next file"
-            @click="navClick(1, $event)"
-          >
-            <i class="ph ph-caret-right" />
-          </button>
-        </template>
       </div>
     </div>
   </main>
@@ -136,40 +112,6 @@ function navClick(dir: -1 | 1, e: MouseEvent) {
   display: flex;
   flex-direction: column;
   background: #0f0f0f;
-}
-.paddle {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 6;
-  width: 40px;
-  height: 62px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: #1a1a1a99;
-  border: 1px solid var(--color-neutral-900);
-  color: var(--color-neutral-400);
-  cursor: pointer;
-  opacity: 0.5;
-  backdrop-filter: blur(4px);
-  font-size: 20px;
-  transition: opacity 0.15s;
-}
-.paddle:hover:not(:disabled) {
-  opacity: 1;
-  color: var(--color-accent-300);
-  border-color: var(--color-accent-700);
-}
-.paddle:disabled {
-  opacity: 0.12;
-  cursor: default;
-}
-.paddle-prev {
-  left: 14px;
-}
-.paddle-next {
-  right: 14px;
 }
 .empty {
   height: 100%;

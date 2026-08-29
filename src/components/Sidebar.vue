@@ -256,6 +256,11 @@ async function deleteFromMenu() {
   flex-direction: column;
   border-right: 1px solid var(--color-neutral-900);
   background: #1d1d1d;
+  /* rapid clicks on rows must not select text */
+  user-select: none;
+}
+.rename-input {
+  user-select: text;
 }
 .scroll {
   flex: 1;

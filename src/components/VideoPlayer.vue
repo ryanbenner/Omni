@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MediaItem, ViewerAction } from "../types";
-import { clampTime, cycleSpeed, formatTime } from "../composables/videoControls";
+import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
 
 const props = defineProps<{ item: MediaItem }>();
 
@@ -90,8 +90,10 @@ function setSpeed(v: number) {
   priorRate = v;
 }
 
-function chipClick() {
-  setSpeed(cycleSpeed(speed.value));
+function onSpeedSelect(e: Event) {
+  const el = e.target as HTMLSelectElement;
+  setSpeed(Number(el.value));
+  el.blur();
 }
 
 const chipLabel = computed(() => {
@@ -109,7 +111,30 @@ function frameStepClick(frames: number) {
 
 const showBadge = computed(() => !playing.value && !failed.value);
 
-onUnmounted(stopRevLoop);
+// on-screen ten second skips clamp at the clip edges and never change files
+function seekTen(dir: -1 | 1) {
+  seekBy(dir * 10);
+}
+
+// controls live over the video and only show while the mouse is around
+const controlsVisible = ref(false);
+let hideTimer = 0;
+
+function showControls() {
+  controlsVisible.value = true;
+  clearTimeout(hideTimer);
+  hideTimer = window.setTimeout(() => (controlsVisible.value = false), 2500);
+}
+
+function hideControls() {
+  clearTimeout(hideTimer);
+  controlsVisible.value = false;
+}
+
+onUnmounted(() => {
+  stopRevLoop();
+  clearTimeout(hideTimer);
+});
 
 watch(src, () => {
   // new file: reset transient state, keep volume and mute
@@ -220,7 +245,12 @@ const progress = computed(() =>
 </script>
 
 <template>
-  <div ref="container" class="video-player">
+  <div
+    ref="container"
+    class="video-player"
+    @pointermove="showControls"
+    @pointerleave="hideControls"
+  >
     <div v-if="failed" class="video-error">
       <p>Couldn't play {{ item.name }}.</p>
       <p class="hint">
@@ -242,7 +272,6 @@ const progress = computed(() =>
         @pause="playing = false"
         @error="onError"
         @click="togglePlay"
-        @dblclick="toggleFullscreen"
       />
       <div v-if="showBadge" class="badge-layer">
         <button class="play-badge" title="Play (Space)" @click="togglePlay">
@@ -250,7 +279,7 @@ const progress = computed(() =>
         </button>
       </div>
     </div>
-    <div v-if="!failed" class="controls">
+    <div v-if="!failed" class="controls" :class="{ hidden: !controlsVisible }">
       <div class="timeline" @click="seekToFraction">
         <div class="track">
           <div class="fill" :style="{ width: progress + '%' }" />
@@ -265,14 +294,36 @@ const progress = computed(() =>
           <button class="tbtn" title="Next frame (.)" @click="frameStepClick(1)">
             <i class="ph ph-skip-forward" />
           </button>
-          <button class="speed-chip" title="Playback speed" @click="chipClick">
-            <i class="ph ph-gauge" />
-            <span>{{ chipLabel }}</span>
-          </button>
+          <span class="speed-chip-wrap">
+            <span class="speed-chip">
+              <i class="ph ph-gauge" />
+              <span>{{ chipLabel }}</span>
+            </span>
+            <select
+              class="speed-select"
+              title="Playback speed"
+              :value="String(speed)"
+              @change="onSpeedSelect"
+            >
+              <option v-for="s in SPEEDS" :key="s" :value="String(s)">{{ s }}x</option>
+            </select>
+          </span>
           <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
         </div>
+        <button class="tbtn skip" title="Back 10 seconds" @click="seekTen(-1)">
+          <span class="skip-wrap">
+            <i class="ph ph-arrow-counter-clockwise" />
+            <span class="skip-num">10</span>
+          </span>
+        </button>
         <button class="play-btn" title="Play / pause (Space)" @click="togglePlay">
           <i class="ph-fill" :class="playing ? 'ph-pause' : 'ph-play'" />
+        </button>
+        <button class="tbtn skip" title="Forward 10 seconds" @click="seekTen(1)">
+          <span class="skip-wrap">
+            <i class="ph ph-arrow-clockwise" />
+            <span class="skip-num">10</span>
+          </span>
         </button>
         <div class="cluster right">
           <button class="tbtn" title="Mute (M)" @click="toggleMute">
@@ -356,9 +407,18 @@ const progress = computed(() =>
   text-align: center;
 }
 .controls {
-  flex: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
   padding: 8px 16px 12px;
-  background: linear-gradient(180deg, transparent, #0b0b0b 55%);
+  background: linear-gradient(180deg, transparent, #0b0b0bd9 55%);
+  transition: opacity 0.2s;
+}
+.controls.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 .timeline {
   position: relative;
@@ -432,28 +492,55 @@ const progress = computed(() =>
   background: var(--color-neutral-900);
   color: var(--color-text);
 }
+.speed-chip-wrap {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
 .speed-chip {
   height: 24px;
-  flex: none;
   display: flex;
   align-items: center;
   gap: 5px;
   padding: 0 8px;
   border-radius: 5px;
   border: 1px solid var(--color-neutral-800);
-  background: none;
   color: var(--color-neutral-400);
   font-size: 11.5px;
-  cursor: pointer;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-body);
 }
 .speed-chip i {
   font-size: 13px;
 }
-.speed-chip:hover {
+.speed-chip-wrap:hover .speed-chip {
   border-color: var(--color-accent-700);
   color: var(--color-accent-200);
+}
+/* the invisible native select sits on top so the picker opens at the chip */
+.speed-select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.skip .skip-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.skip {
+  width: 32px;
+  height: 32px;
+  font-size: 21px;
+  color: var(--color-neutral-400);
+}
+.skip .skip-num {
+  position: absolute;
+  font-size: 6.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-top: 1px;
 }
 .time {
   font-size: 12px;
