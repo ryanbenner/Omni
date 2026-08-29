@@ -1,11 +1,101 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import type { MediaItem, ViewerAction } from "../types";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { DirListing, MediaItem, ViewerAction } from "../types";
 import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
+import TrimBar from "./TrimBar.vue";
+import ExportPanel from "./ExportPanel.vue";
+import { useTrim } from "../composables/useTrim";
+import { ensureMp4, newClipName, useExport, type ExportRequest } from "../composables/useExport";
+import { parentDir, sepOf } from "../composables/pathUtils";
 
 const props = defineProps<{ item: MediaItem }>();
-const emit = defineEmits<{ deleteFile: [] }>();
+const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string] }>();
+
+const trim = useTrim();
+const exporter = useExport();
+const exportName = ref("");
+const toast = ref<string | null>(null);
+let toastTimer = 0;
+
+function flash(msg: string) {
+  toast.value = msg;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.value = null), 4000);
+}
+
+function toggleTrim() {
+  if (trim.active.value) {
+    trim.exit();
+    return;
+  }
+  const el = video.value;
+  if (!el || !Number.isFinite(el.duration)) return;
+  el.pause();
+  trim.enter(el.duration);
+}
+
+function onScrub(t: number) {
+  const el = video.value;
+  if (el) el.currentTime = t;
+}
+
+async function onExport(
+  mode: "fast" | "precise" | "discord",
+  replace: boolean,
+  newName: string | null,
+) {
+  const el = video.value;
+  if (!el || exporter.running.value) return;
+  el.pause();
+  const dir = parentDir(props.item.path);
+  const sep = sepOf(props.item.path);
+  const stem = props.item.name.replace(/\.[^.]+$/, "");
+  const target = mode === "discord" ? 50 * 1024 * 1024 : undefined;
+  try {
+    if (!replace) {
+      const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+      const name = newClipName(props.item.name, listing.files.map((f) => f.name));
+      const output = dir + sep + name;
+      exportName.value = name;
+      await runExport({ output, mode, target });
+      flash(`Saved ${name}`);
+      trim.exit();
+      emit("clipSaved", output);
+    } else {
+      const tmp = dir + sep + stem + ".omniexport.tmp.mp4";
+      exportName.value = props.item.name;
+      await runExport({ output: tmp, mode, target });
+      try {
+        await invoke("delete_file", { path: props.item.path });
+        const finalName = ensureMp4(newName ?? props.item.name);
+        const newPath = await invoke<string>("rename_file", { path: tmp, newName: finalName });
+        flash("Replaced");
+        trim.exit();
+        emit("clipSaved", newPath);
+      } catch (e) {
+        // original untouched or already trashed; never leave the temp around
+        await invoke("delete_file", { path: tmp }).catch(() => {});
+        throw e;
+      }
+    }
+  } catch (e) {
+    const msg = String(e);
+    if (!msg.includes("cancelled")) flash("Export failed: " + msg);
+  }
+}
+
+function runExport(o: { output: string; mode: ExportRequest["mode"]; target?: number }) {
+  const req: ExportRequest = {
+    input: props.item.path,
+    output: o.output,
+    inSec: trim.inSec.value,
+    outSec: trim.outSec.value,
+    mode: o.mode,
+    targetBytes: o.target,
+  };
+  return exporter.run(req);
+}
 
 const container = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
@@ -144,6 +234,7 @@ function hideControls() {
 onUnmounted(() => {
   stopRevLoop();
   clearTimeout(hideTimer);
+  clearTimeout(toastTimer);
   window.removeEventListener("pointerdown", closeSpeedMenu);
 });
 
@@ -155,6 +246,7 @@ watch(src, () => {
   speed.value = 1;
   speedMenuOpen.value = false;
   clearShuttle();
+  trim.exit();
 });
 
 function onLoadedMetadata() {
@@ -168,7 +260,12 @@ function onLoadedMetadata() {
 }
 
 function onTimeUpdate() {
-  currentTime.value = video.value?.currentTime ?? 0;
+  const el = video.value;
+  currentTime.value = el?.currentTime ?? 0;
+  if (el && trim.active.value && !el.paused && el.currentTime >= trim.outSec.value) {
+    el.pause();
+    el.currentTime = trim.outSec.value;
+  }
 }
 
 function onError() {
@@ -178,8 +275,15 @@ function onError() {
 function togglePlay() {
   const el = video.value;
   if (!el) return;
-  if (el.paused) el.play().catch(() => {});
-  else el.pause();
+  if (el.paused) {
+    if (
+      trim.active.value &&
+      (el.currentTime < trim.inSec.value || el.currentTime >= trim.outSec.value - 0.01)
+    ) {
+      el.currentTime = trim.inSec.value;
+    }
+    el.play().catch(() => {});
+  } else el.pause();
 }
 
 function seekBy(seconds: number) {
@@ -221,11 +325,21 @@ function handleAction(action: ViewerAction): boolean {
       return true;
     case "seek": {
       // paused at the relevant edge means the user is done: let the
-      // app fall back to prev/next file per spec
-      if (el.paused && action.seconds < 0 && el.currentTime <= EDGE) return false;
-      if (el.paused && action.seconds > 0 && el.currentTime >= el.duration - EDGE)
+      // app fall back to prev/next file per spec (never while trimming,
+      // so arrows can't bounce the app to a different file mid-trim)
+      if (!trim.active.value && el.paused && action.seconds < 0 && el.currentTime <= EDGE)
+        return false;
+      if (
+        !trim.active.value &&
+        el.paused &&
+        action.seconds > 0 &&
+        el.currentTime >= el.duration - EDGE
+      )
         return false;
       seekBy(action.seconds);
+      if (trim.active.value) {
+        el.currentTime = Math.min(trim.outSec.value, Math.max(trim.inSec.value, el.currentTime));
+      }
       return true;
     }
     case "frameStep":
@@ -243,6 +357,16 @@ function handleAction(action: ViewerAction): boolean {
       return true;
     case "toggleFullscreen":
       toggleFullscreen();
+      return true;
+    case "setIn":
+      if (trim.active.value) trim.setIn(el.currentTime);
+      return true;
+    case "setOut":
+      if (trim.active.value) trim.setOut(el.currentTime);
+      return true;
+    case "exitTrim":
+      if (!trim.active.value) return false;
+      trim.exit();
       return true;
     default:
       return false;
@@ -294,17 +418,31 @@ const progress = computed(() =>
     <div
       v-if="!failed"
       class="controls"
-      :class="{ hidden: !controlsVisible && !speedMenuOpen }"
+      :class="{ hidden: !controlsVisible && !speedMenuOpen && !trim.active.value }"
     >
-      <div class="time-row">
-        <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-      </div>
-      <div class="timeline" @click="seekToFraction">
-        <div class="track">
-          <div class="fill" :style="{ width: progress + '%' }" />
-          <div class="knob" :style="{ left: progress + '%' }" />
+      <ExportPanel
+        v-if="trim.active.value"
+        :busy="exporter.running.value"
+        :percent="exporter.percent.value"
+        :output-name="exportName"
+        :current-name="item.name"
+        @do-export="onExport"
+        @cancel-export="exporter.cancel()"
+      />
+      <template v-if="trim.active.value">
+        <TrimBar :trim="trim" :current-time="currentTime" @scrub="onScrub" />
+      </template>
+      <template v-else>
+        <div class="time-row">
+          <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
         </div>
-      </div>
+        <div class="timeline" @click="seekToFraction">
+          <div class="track">
+            <div class="fill" :style="{ width: progress + '%' }" />
+            <div class="knob" :style="{ left: progress + '%' }" />
+          </div>
+        </div>
+      </template>
       <div class="transport">
         <div class="cluster left">
           <button class="tbtn" title="Delete file" @click="emit('deleteFile')">
@@ -356,12 +494,21 @@ const progress = computed(() =>
             :value="volume"
             @input="setVolume"
           />
+          <button
+            class="tbtn"
+            :class="{ 'tbtn-active': trim.active.value }"
+            title="Trim clip"
+            @click="toggleTrim"
+          >
+            <i class="ph ph-scissors" />
+          </button>
           <button class="tbtn" title="Fullscreen (F)" @click="toggleFullscreen">
             <i class="ph ph-corners-out" />
           </button>
         </div>
       </div>
     </div>
+    <div v-if="toast" class="export-toast">{{ toast }}</div>
   </div>
 </template>
 
@@ -626,5 +773,22 @@ const progress = computed(() =>
   width: 88px;
   height: 4px;
   flex: none;
+}
+.tbtn-active {
+  color: var(--color-accent-300);
+  background: var(--color-accent-900);
+}
+.export-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  color: var(--color-accent-200);
+  font-size: 12px;
 }
 </style>

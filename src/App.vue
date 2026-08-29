@@ -64,6 +64,11 @@ function openDefaultApps() {
   openUrl("ms-settings:defaultapps").catch(() => {});
 }
 
+function onClipSaved(path: string) {
+  list.openFile(path);
+  sidebar.value?.refreshDir(parentDir(path));
+}
+
 async function deleteCurrent() {
   const cur = list.current.value;
   if (!cur) return;
@@ -102,6 +107,7 @@ async function deleteCurrent() {
           ref="viewer"
           :item="list.current.value"
           @delete-file="deleteCurrent"
+          @clip-saved="onClipSaved"
         />
         <div v-else class="empty">
           <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>

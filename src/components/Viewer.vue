@@ -5,7 +5,7 @@ import VideoPlayer from "./VideoPlayer.vue";
 import ImageViewer from "./ImageViewer.vue";
 
 defineProps<{ item: MediaItem }>();
-defineEmits<{ deleteFile: [] }>();
+defineEmits<{ deleteFile: []; clipSaved: [path: string] }>();
 
 const child = ref<{ handleAction: (a: ViewerAction) => boolean } | null>(null);
 
@@ -22,6 +22,7 @@ defineExpose({ handleAction });
     ref="child"
     :item="item"
     @delete-file="$emit('deleteFile')"
+    @clip-saved="$emit('clipSaved', $event)"
   />
   <ImageViewer v-else ref="child" :item="item" />
 </template>
