@@ -117,7 +117,7 @@ defineExpose({ handleAction });
       draggable="false"
       @error="failed = true"
     />
-    <div class="pill" @pointerdown.stop>
+    <div v-if="!failed" class="pill" @pointerdown.stop="menu = null">
       <button class="pill-btn" title="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
         <i class="ph ph-magnifying-glass-minus" />
       </button>
