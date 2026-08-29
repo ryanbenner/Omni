@@ -64,19 +64,45 @@ async function onExport(
       emit("clipSaved", output);
     } else {
       const tmp = dir + sep + stem + ".omniexport.tmp.mp4";
+      const finalName = ensureMp4(newName ?? props.item.name);
       exportName.value = props.item.name;
       await runExport({ output: tmp, mode, target });
+      // collision check happens before the original is touched, so a bad
+      // chosen name can still be aborted with both copies intact
+      const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+      const collides = listing.files.some(
+        (f) =>
+          f.name.toLowerCase() === finalName.toLowerCase() &&
+          f.name.toLowerCase() !== props.item.name.toLowerCase(),
+      );
+      if (collides) {
+        await invoke("delete_file", { path: tmp }).catch(() => {});
+        flash("Export failed: " + finalName + " already exists");
+        return;
+      }
       try {
         await invoke("delete_file", { path: props.item.path });
-        const finalName = ensureMp4(newName ?? props.item.name);
         const newPath = await invoke<string>("rename_file", { path: tmp, newName: finalName });
         flash("Replaced");
         trim.exit();
         emit("clipSaved", newPath);
-      } catch (e) {
-        // original untouched or already trashed; never leave the temp around
-        await invoke("delete_file", { path: tmp }).catch(() => {});
-        throw e;
+      } catch {
+        // original is already trashed at this point: tmp is the only copy
+        // left, so never delete it — try to fall back to the freed-up
+        // original name, and if even that fails leave tmp on disk
+        try {
+          const fallbackPath = await invoke<string>("rename_file", {
+            path: tmp,
+            newName: props.item.name,
+          });
+          flash("Replaced (kept original name — chosen name was taken)");
+          trim.exit();
+          emit("clipSaved", fallbackPath);
+        } catch {
+          flash(
+            "Export kept as " + stem + ".omniexport.tmp.mp4 — original is in the Recycle Bin",
+          );
+        }
       }
     }
   } catch (e) {
@@ -131,7 +157,8 @@ function revTick(ts: number) {
   if (!el || shuttle.value !== "rev") return;
   const dt = revLastTs ? (ts - revLastTs) / 1000 : 0;
   revLastTs = ts;
-  el.currentTime = Math.max(0, el.currentTime - SHUTTLE_RATE * dt);
+  const floor = trim.active.value ? trim.inSec.value : 0;
+  el.currentTime = Math.max(floor, el.currentTime - SHUTTLE_RATE * dt);
   revRaf = requestAnimationFrame(revTick);
 }
 
@@ -164,7 +191,7 @@ function stopShuttle(direction: 1 | -1) {
   stopRevLoop();
   shuttle.value = null;
   el.playbackRate = priorRate;
-  if (priorPaused) el.pause();
+  if (priorPaused || (trim.active.value && el.currentTime >= trim.outSec.value - 0.01)) el.pause();
   else el.play().catch(() => {});
 }
 
