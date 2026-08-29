@@ -16,7 +16,13 @@ pub struct ExportRequest {
 }
 
 #[derive(Default)]
-pub struct ExportState(pub Mutex<Option<CommandChild>>);
+pub struct ExportSlot {
+    pub child: Option<CommandChild>,
+    pub generation: u64,
+}
+
+#[derive(Default)]
+pub struct ExportState(pub Mutex<ExportSlot>);
 
 fn secs(v: f64) -> String {
     format!("{v:.3}")
@@ -71,23 +77,28 @@ pub async fn export_clip(
 ) -> Result<(), String> {
     let args = build_args(&req)?;
     let duration = req.out_sec - req.in_sec;
-    {
-        let guard = state.0.lock().unwrap();
-        if guard.is_some() {
+    // check, spawn, and store atomically under one lock so two concurrent
+    // invokes can't both pass the busy-check (TOCTOU)
+    let (mut rx, my_gen) = {
+        let mut slot = state.0.lock().unwrap();
+        if slot.child.is_some() {
             return Err("an export is already running".into());
         }
-    }
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("ffmpeg")
-        .map_err(|e| e.to_string())?
-        .args(&args)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    *state.0.lock().unwrap() = Some(child);
+        let (rx, child) = app
+            .shell()
+            .sidecar("ffmpeg")
+            .map_err(|e| e.to_string())?
+            .args(&args)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        slot.generation += 1;
+        slot.child = Some(child);
+        (rx, slot.generation)
+    };
 
     let mut stderr_tail: Vec<String> = Vec::new();
     let mut code: Option<i32> = None;
+    let mut errored = false;
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) => {
@@ -109,17 +120,31 @@ pub async fn export_clip(
             CommandEvent::Terminated(payload) => {
                 code = payload.code;
             }
+            CommandEvent::Error(msg) => {
+                errored = true;
+                stderr_tail.push(msg);
+                if stderr_tail.len() > 20 {
+                    stderr_tail.remove(0);
+                }
+            }
             _ => {}
         }
     }
-    *state.0.lock().unwrap() = None;
+    // only clear our own generation's slot — a cancel+immediate-re-export
+    // may have already bumped the generation and stored a newer child
+    {
+        let mut slot = state.0.lock().unwrap();
+        if slot.generation == my_gen {
+            slot.child = None;
+        }
+    }
     if code == Some(0) {
         let _ = app.emit("export-progress", serde_json::json!({ "percent": 100.0 }));
         Ok(())
     } else {
         // never leave a partial file behind
         let _ = std::fs::remove_file(&req.output);
-        Err(if code.is_none() {
+        Err(if code.is_none() && !errored {
             "export cancelled".into()
         } else {
             format!("ffmpeg failed: {}", stderr_tail.join("\n"))
@@ -129,7 +154,7 @@ pub async fn export_clip(
 
 #[tauri::command]
 pub fn cancel_export(state: tauri::State<'_, ExportState>) {
-    if let Some(child) = state.0.lock().unwrap().take() {
+    if let Some(child) = state.0.lock().unwrap().child.take() {
         let _ = child.kill();
     }
 }
