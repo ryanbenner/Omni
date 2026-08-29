@@ -115,4 +115,21 @@ describe("resolveKey", () => {
     expect(resolveKey(k("ArrowRight"), null)).toBeNull();
     expect(resolveKey(k("q"), "video")).toBeNull();
   });
+
+  it("i, o and escape map to trim actions on video only", () => {
+    expect(resolveKey(k("i"), "video")).toEqual({
+      target: "viewer",
+      action: { type: "setIn" },
+    });
+    expect(resolveKey(k("O"), "video")).toEqual({
+      target: "viewer",
+      action: { type: "setOut" },
+    });
+    expect(resolveKey(k("Escape"), "video")).toEqual({
+      target: "viewer",
+      action: { type: "exitTrim" },
+    });
+    expect(resolveKey(k("i"), "image")).toBeNull();
+    expect(resolveKey(k("Escape"), "image")).toBeNull();
+  });
 });

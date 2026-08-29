@@ -62,6 +62,12 @@ export function resolveKey(
       return { target: "viewer", action: { type: "toggleMute" } };
     case "f":
       return { target: "viewer", action: { type: "toggleFullscreen" } };
+    case "i":
+      return { target: "viewer", action: { type: "setIn" } };
+    case "o":
+      return { target: "viewer", action: { type: "setOut" } };
+    case "Escape":
+      return { target: "viewer", action: { type: "exitTrim" } };
   }
   return null;
 }

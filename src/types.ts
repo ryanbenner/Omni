@@ -22,7 +22,10 @@ export type ViewerAction =
   | { type: "toggleFullscreen" }
   | { type: "rotate" }
   | { type: "resetZoom" }
-  | { type: "fit" };
+  | { type: "fit" }
+  | { type: "setIn" }
+  | { type: "setOut" }
+  | { type: "exitTrim" };
 
 export type AppAction = { type: "prevFile" } | { type: "nextFile" };
 
