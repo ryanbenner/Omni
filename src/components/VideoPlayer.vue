@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MediaItem, ViewerAction } from "../types";
-import { clampTime, formatTime } from "../composables/videoControls";
+import { clampTime, cycleSpeed, formatTime } from "../composables/videoControls";
 
 const props = defineProps<{ item: MediaItem }>();
 
@@ -16,6 +16,7 @@ const duration = ref(0);
 const volume = ref(1);
 const muted = ref(false);
 const failed = ref(false);
+const speed = ref(1);
 
 const FRAME = 1 / 60;
 const EDGE = 0.05;
@@ -81,6 +82,33 @@ function clearShuttle() {
   shuttle.value = null;
 }
 
+function setSpeed(v: number) {
+  speed.value = v;
+  const el = video.value;
+  // shuttle owns playbackRate while active; it restores speed via priorrate
+  if (el && shuttle.value === null) el.playbackRate = v;
+  if (shuttle.value === null) priorRate = v;
+}
+
+function chipClick() {
+  setSpeed(cycleSpeed(speed.value));
+}
+
+const chipLabel = computed(() => {
+  if (shuttle.value === "fwd") return "0.1x";
+  if (shuttle.value === "rev") return "-0.1x";
+  return speed.value + "x";
+});
+
+function frameStepClick(frames: number) {
+  const el = video.value;
+  if (!el) return;
+  el.pause();
+  seekBy(frames * FRAME);
+}
+
+const showBadge = computed(() => !playing.value && !failed.value);
+
 onUnmounted(stopRevLoop);
 
 watch(src, () => {
@@ -88,6 +116,7 @@ watch(src, () => {
   failed.value = false;
   currentTime.value = 0;
   duration.value = 0;
+  speed.value = 1;
   clearShuttle();
 });
 
@@ -95,7 +124,7 @@ function onLoadedMetadata() {
   const el = video.value;
   if (!el) return;
   duration.value = el.duration;
-  el.playbackRate = 1;
+  el.playbackRate = speed.value;
   el.volume = volume.value;
   el.muted = muted.value;
   el.play().catch(() => {});
@@ -198,43 +227,70 @@ const progress = computed(() =>
         Windows couldn't decode this video. Note: an .mp4 file can still
         contain HEVC/H.265 video (common for ShadowPlay HDR or high-quality
         captures) — install the free "HEVC Video Extensions" from the
-        Microsoft Store, then reopen the file. .mkv files and files outside
-        your user folder also can't play in this viewer yet.
+        Microsoft Store, then reopen the file. .mkv files also can't play in
+        this viewer yet.
       </p>
     </div>
-    <video
-      v-else
-      ref="video"
-      :src="src"
-      class="video-el"
-      @loadedmetadata="onLoadedMetadata"
-      @timeupdate="onTimeUpdate"
-      @play="playing = true"
-      @pause="playing = false"
-      @error="onError"
-      @click="togglePlay"
-      @dblclick="toggleFullscreen"
-    />
+    <div v-else class="video-wrap">
+      <video
+        ref="video"
+        :src="src"
+        class="video-el"
+        @loadedmetadata="onLoadedMetadata"
+        @timeupdate="onTimeUpdate"
+        @play="playing = true"
+        @pause="playing = false"
+        @error="onError"
+        @click="togglePlay"
+        @dblclick="toggleFullscreen"
+      />
+      <div v-if="showBadge" class="badge-layer">
+        <button class="play-badge" title="Play (Space)" @click="togglePlay">
+          <i class="ph-fill ph-play" />
+        </button>
+      </div>
+    </div>
     <div v-if="!failed" class="controls">
       <div class="timeline" @click="seekToFraction">
-        <div class="timeline-fill" :style="{ width: progress + '%' }" />
+        <div class="track">
+          <div class="fill" :style="{ width: progress + '%' }" />
+          <div class="knob" :style="{ left: progress + '%' }" />
+        </div>
       </div>
-      <div class="controls-row">
-        <button class="ctl" @click="togglePlay">{{ playing ? "Pause" : "Play" }}</button>
-        <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-        <span class="speed" v-show="shuttle">{{ shuttle === "fwd" ? "0.1x" : "-0.1x" }}</span>
-        <span class="spacer" />
-        <button class="ctl" @click="toggleMute">{{ muted ? "Unmute" : "Mute" }}</button>
-        <input
-          class="volume"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="volume"
-          @input="setVolume"
-        />
-        <button class="ctl" @click="toggleFullscreen">Fullscreen</button>
+      <div class="transport">
+        <div class="cluster left">
+          <button class="tbtn" title="Previous frame (,)" @click="frameStepClick(-1)">
+            <i class="ph ph-skip-back" />
+          </button>
+          <button class="tbtn" title="Next frame (.)" @click="frameStepClick(1)">
+            <i class="ph ph-skip-forward" />
+          </button>
+          <button class="speed-chip" title="Playback speed" @click="chipClick">
+            <i class="ph ph-gauge" />
+            <span>{{ chipLabel }}</span>
+          </button>
+          <span class="time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
+        </div>
+        <button class="play-btn" title="Play / pause (Space)" @click="togglePlay">
+          <i class="ph-fill" :class="playing ? 'ph-pause' : 'ph-play'" />
+        </button>
+        <div class="cluster right">
+          <button class="tbtn" title="Mute (M)" @click="toggleMute">
+            <i class="ph" :class="muted || volume === 0 ? 'ph-speaker-slash' : 'ph-speaker-high'" />
+          </button>
+          <input
+            class="volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            :value="volume"
+            @input="setVolume"
+          />
+          <button class="tbtn" title="Fullscreen (F)" @click="toggleFullscreen">
+            <i class="ph ph-corners-out" />
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -247,13 +303,43 @@ const progress = computed(() =>
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: #0f0f0f;
 }
-.video-el {
+.video-wrap {
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+.video-el {
   width: 100%;
+  height: 100%;
   object-fit: contain;
+}
+.badge-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.play-badge {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #1a1a1ab3;
+  border: 1px solid var(--color-accent-700);
+  color: var(--color-accent-200);
+  box-shadow: 0 0 40px color-mix(in oklab, var(--color-accent) 30%, transparent);
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 26px;
+  padding-left: 3px;
+}
+.play-badge:hover {
+  border-color: var(--color-accent);
+  background: #262626cc;
 }
 .video-error {
   flex: 1;
@@ -262,52 +348,140 @@ const progress = computed(() =>
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  padding: 1rem;
 }
 .video-error .hint {
-  color: #999;
-  max-width: 40ch;
+  color: var(--color-neutral-500);
+  max-width: 44ch;
   text-align: center;
 }
 .controls {
-  padding: 0 0.75rem 0.5rem;
-  background: #000;
+  flex: none;
+  padding: 8px 16px 12px;
+  background: linear-gradient(180deg, transparent, #0b0b0b 55%);
 }
 .timeline {
-  height: 8px;
-  background: #333;
-  border-radius: 4px;
-  cursor: pointer;
-  margin: 0.4rem 0;
-}
-.timeline-fill {
-  height: 100%;
-  background: #4a9eff;
-  border-radius: 4px;
-  pointer-events: none;
-}
-.controls-row {
+  position: relative;
+  height: 16px;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-}
-.ctl {
-  background: #222;
-  color: #ddd;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 0.2rem 0.6rem;
   cursor: pointer;
 }
-.time,
-.speed {
-  font-variant-numeric: tabular-nums;
-  color: #aaa;
-  font-size: 0.85rem;
+.track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--color-neutral-900);
 }
-.spacer {
+.fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--color-accent-600), var(--color-accent));
+  pointer-events: none;
+}
+.knob {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--color-accent-200);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--color-accent) 70%, transparent);
+  pointer-events: none;
+}
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.cluster {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cluster.right {
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tbtn {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  font-size: 15px;
+}
+.cluster.right .tbtn {
+  font-size: 16px;
+}
+.tbtn:hover {
+  background: var(--color-neutral-900);
+  color: var(--color-text);
+}
+.speed-chip {
+  height: 24px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid var(--color-neutral-800);
+  background: none;
+  color: var(--color-neutral-400);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-body);
+}
+.speed-chip i {
+  font-size: 13px;
+}
+.speed-chip:hover {
+  border-color: var(--color-accent-700);
+  color: var(--color-accent-200);
+}
+.time {
+  font-size: 12px;
+  color: var(--color-neutral-500);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  margin-left: 2px;
+}
+.play-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent-700);
+  background: none;
+  color: var(--color-accent-200);
+  cursor: pointer;
+  font-size: 15px;
+}
+.play-btn:hover {
+  background: var(--color-accent-900);
+  border-color: var(--color-accent);
 }
 .volume {
-  width: 90px;
+  width: 88px;
+  height: 4px;
+  flex: none;
 }
 </style>

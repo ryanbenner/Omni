@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampTime, formatTime } from "../videoControls";
+import { clampTime, cycleSpeed, formatTime, SPEEDS } from "../videoControls";
 
 describe("clampTime", () => {
   it("clamps into [0, duration]", () => {
@@ -22,5 +22,17 @@ describe("formatTime", () => {
 
   it("is nan-safe", () => {
     expect(formatTime(NaN)).toBe("0:00");
+  });
+});
+
+describe("cycleSpeed", () => {
+  it("advances through the speed table and wraps", () => {
+    expect(SPEEDS).toEqual([0.25, 0.5, 1, 1.5, 2]);
+    expect(cycleSpeed(0.25)).toBe(0.5);
+    expect(cycleSpeed(1)).toBe(1.5);
+    expect(cycleSpeed(2)).toBe(0.25);
+  });
+  it("recovers from an unknown speed", () => {
+    expect(cycleSpeed(0.1)).toBe(1);
   });
 });
