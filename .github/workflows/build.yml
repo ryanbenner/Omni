@@ -40,6 +40,6 @@ jobs:
       - name: upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: media-viewer-windows
+          name: omni-windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error

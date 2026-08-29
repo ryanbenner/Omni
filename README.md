@@ -7,7 +7,7 @@ Multiuse Windows media viewer for videos and photos. Tauri 2 + Vue 3.
 Every push to `main` builds an NSIS installer on GitHub Actions:
 
 1. GitHub → Actions → latest `build` run
-2. Download the `media-viewer-windows` artifact
+2. Download the `omni-windows` artifact
 3. Unzip and run the `.exe` installer
 
 The installer registers "Open with" entries for mp4/mkv/mov and
