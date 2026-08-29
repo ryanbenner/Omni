@@ -9,6 +9,9 @@ const props = defineProps<{ item: MediaItem }>();
 const src = computed(() => convertFileSrc(props.item.path));
 const failed = ref(false);
 const t = useImageTransform();
+const container = ref<HTMLElement | null>(null);
+
+const zoomPct = computed(() => Math.round(t.scale.value * 100) + "%");
 
 watch(src, () => {
   failed.value = false;
@@ -39,6 +42,11 @@ function resetView() {
   t.reset();
   t.rotation.value = 0;
   menu.value = null;
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else container.value?.requestFullscreen();
 }
 
 function onPointerDown(e: PointerEvent) {
@@ -85,6 +93,7 @@ defineExpose({ handleAction });
 
 <template>
   <div
+    ref="container"
     class="image-viewer"
     @wheel="onWheel"
     @pointerdown="onPointerDown"
@@ -108,6 +117,25 @@ defineExpose({ handleAction });
       draggable="false"
       @error="failed = true"
     />
+    <div class="pill" @pointerdown.stop>
+      <button class="pill-btn" title="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
+        <i class="ph ph-magnifying-glass-minus" />
+      </button>
+      <span class="pill-pct">{{ zoomPct }}</span>
+      <button class="pill-btn" title="Zoom in" @click="t.zoomBy(ZOOM_STEP)">
+        <i class="ph ph-magnifying-glass-plus" />
+      </button>
+      <span class="pill-div" />
+      <button class="pill-btn" title="Fit to window (F)" @click="t.reset()">
+        <i class="ph ph-frame-corners" />
+      </button>
+      <button class="pill-btn" title="Rotate (R)" @click="t.rotate()">
+        <i class="ph ph-arrow-clockwise" />
+      </button>
+      <button class="pill-btn" title="Fullscreen" @click="toggleFullscreen">
+        <i class="ph ph-corners-out" />
+      </button>
+    </div>
     <div
       v-if="menu"
       class="context-menu"
@@ -121,13 +149,14 @@ defineExpose({ handleAction });
 
 <style scoped>
 .image-viewer {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #111;
+  background: #0f0f0f;
   cursor: grab;
   touch-action: none;
 }
@@ -148,15 +177,60 @@ defineExpose({ handleAction });
   gap: 0.5rem;
 }
 .image-error .hint {
-  color: #999;
+  color: var(--color-neutral-500);
   max-width: 40ch;
   text-align: center;
+}
+.pill {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 9px;
+  background: #1e1e1ed9;
+  border: 1px solid var(--color-neutral-900);
+  backdrop-filter: blur(8px);
+  cursor: default;
+}
+.pill-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-neutral-400);
+  cursor: pointer;
+  font-size: 16px;
+}
+.pill-btn:hover {
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
+}
+.pill-pct {
+  min-width: 46px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+  font-variant-numeric: tabular-nums;
+}
+.pill-div {
+  width: 1px;
+  height: 18px;
+  margin: 0 5px;
+  background: var(--color-neutral-900);
 }
 .context-menu {
   position: fixed;
   z-index: 20;
-  background: #222;
-  border: 1px solid #444;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
   border-radius: 4px;
   padding: 2px;
   box-shadow: 0 4px 12px #0008;
@@ -173,6 +247,6 @@ defineExpose({ handleAction });
   border-radius: 3px;
 }
 .menu-item:hover {
-  background: #2c4a6e;
+  background: var(--color-accent-900);
 }
 </style>
