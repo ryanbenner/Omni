@@ -1,5 +1,6 @@
 mod scan;
 mod browse;
+mod export;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,17 +18,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_cli::init())?;
             Ok(())
         })
+        .manage(export::ExportState::default())
         .invoke_handler(tauri::generate_handler![
             scan::scan_media,
             browse::list_drives,
             browse::read_dir_entries,
             browse::delete_file,
-            browse::rename_file
+            browse::rename_file,
+            export::export_clip,
+            export::cancel_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
