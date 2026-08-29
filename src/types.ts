@@ -25,3 +25,24 @@ export type ViewerAction =
   | { type: "fit" };
 
 export type AppAction = { type: "prevFile" } | { type: "nextFile" };
+
+export interface DriveInfo {
+  path: string;
+  name: string;
+}
+
+export interface FolderEntry {
+  path: string;
+  name: string;
+}
+
+export interface DirListing {
+  folders: FolderEntry[];
+  files: MediaItem[];
+}
+
+export interface Pin {
+  path: string;
+  name: string;
+  count: number;
+}
