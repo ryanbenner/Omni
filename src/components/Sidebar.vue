@@ -276,7 +276,7 @@ async function deleteFromMenu() {
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--color-neutral-900);
-  background: #1d1d1d;
+  background: #121315;
   /* rapid clicks on rows must not select text */
   user-select: none;
 }
@@ -369,7 +369,7 @@ async function deleteFromMenu() {
   height: 16px;
   flex: none;
   border-radius: 3px;
-  background: #121212;
+  background: #101113;
   border: 1px solid var(--color-neutral-900);
   display: grid;
   place-items: center;
@@ -456,7 +456,7 @@ async function deleteFromMenu() {
   font: inherit;
   font-size: 12px;
   color: var(--color-text);
-  background: #121212;
+  background: #101113;
   border: 1px solid var(--color-accent-700);
   border-radius: 3px;
   outline: none;

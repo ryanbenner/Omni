@@ -143,7 +143,7 @@ async function deleteCurrent() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #0f0f0f;
+  background: #0a0b0c;
 }
 .empty {
   height: 100%;

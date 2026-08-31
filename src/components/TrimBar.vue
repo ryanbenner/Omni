@@ -125,7 +125,7 @@ const playheadPct = computed(() => pct(props.currentTime));
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #0f0f0f80;
+  background: #0a0b0c80;
   pointer-events: none;
 }
 .kept {

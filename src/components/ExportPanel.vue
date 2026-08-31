@@ -44,7 +44,7 @@ const emit = defineEmits<{
   padding: 7px 10px;
   margin-bottom: 6px;
   border-radius: 12px;
-  background: #1e1e1ef0;
+  background: #17181af0;
   border: 1px solid var(--color-neutral-800);
   backdrop-filter: blur(8px);
   font-size: 12px;

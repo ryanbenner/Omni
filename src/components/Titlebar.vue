@@ -44,7 +44,7 @@ const win = getCurrentWindow();
   gap: 9px;
   padding-left: 6px;
   border-bottom: 1px solid var(--color-neutral-900);
-  background: #1f1f1f;
+  background: #131416;
   user-select: none;
 }
 .tb-sidebar {

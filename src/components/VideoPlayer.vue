@@ -657,7 +657,7 @@ const progress = computed(() =>
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #0f0f0f;
+  background: #0a0b0c;
 }
 .video-wrap {
   flex: 1;
@@ -682,7 +682,7 @@ const progress = computed(() =>
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #1a1a1ab3;
+  background: #141517b3;
   border: 1px solid var(--color-accent-700);
   color: var(--color-accent-200);
   box-shadow: 0 0 40px color-mix(in oklab, var(--color-accent) 30%, transparent);
@@ -693,7 +693,7 @@ const progress = computed(() =>
 }
 .play-badge:hover {
   border-color: var(--color-accent);
-  background: #262626cc;
+  background: #1d1f22cc;
 }
 .video-error {
   flex: 1;
@@ -716,7 +716,7 @@ const progress = computed(() =>
   bottom: 0;
   z-index: 5;
   padding: 8px 16px 12px;
-  background: linear-gradient(180deg, transparent, #0b0b0bd9 55%);
+  background: linear-gradient(180deg, transparent, #0a0b0cd9 55%);
   transition: opacity 0.2s;
 }
 .controls.hidden {
@@ -834,7 +834,7 @@ const progress = computed(() =>
   min-width: 68px;
   padding: 4px;
   border-radius: 12px;
-  background: #1e1e1ef0;
+  background: #17181af0;
   border: 1px solid var(--color-neutral-800);
   box-shadow: 0 8px 24px #000a;
   backdrop-filter: blur(8px);
@@ -963,7 +963,7 @@ const progress = computed(() =>
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--color-accent-700);
-  background: #121212;
+  background: #101113;
   color: var(--color-text);
   font: inherit;
   outline: none;
