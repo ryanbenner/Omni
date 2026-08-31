@@ -17,7 +17,7 @@ const win = getCurrentWindow();
       <i class="ph ph-sidebar-simple" />
     </button>
     <div class="tb-brand" data-tauri-drag-region>
-      <span class="tb-logo-ring" data-tauri-drag-region />
+      <span class="tb-logo-prism" data-tauri-drag-region />
       <span class="tb-name" data-tauri-drag-region>Omni</span>
     </div>
     <div class="tb-spacer" data-tauri-drag-region />
@@ -68,16 +68,17 @@ const win = getCurrentWindow();
   align-items: center;
   gap: 7px;
 }
-.tb-logo-ring {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 3.5px solid #c4c6cb;
-  box-sizing: border-box;
-  background: transparent;
+.tb-logo-prism {
+  /* tiny css triangle matching the prism app icon */
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 12px solid var(--color-accent);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent));
 }
 .tb-name {
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.03em;
   color: var(--color-neutral-500);
 }

@@ -290,7 +290,7 @@ async function deleteFromMenu() {
   padding: 8px 8px 14px;
 }
 .section-label {
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--color-neutral-600);
   padding: 6px 8px 4px;
@@ -382,7 +382,7 @@ async function deleteFromMenu() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 13px;
 }
 .row-name.rtl {
   direction: rtl;
@@ -406,7 +406,7 @@ async function deleteFromMenu() {
   padding: 0 12px;
   border-top: 1px solid var(--color-neutral-900);
   color: var(--color-neutral-600);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .footer i {
   font-size: 13px;
@@ -439,7 +439,7 @@ async function deleteFromMenu() {
   text-align: left;
   cursor: pointer;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .menu-item i {
   font-size: 13px;
@@ -454,7 +454,7 @@ async function deleteFromMenu() {
   height: 20px;
   padding: 0 4px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text);
   background: #101113;
   border: 1px solid var(--color-accent-700);
