@@ -69,12 +69,12 @@ const win = getCurrentWindow();
   gap: 7px;
 }
 .tb-logo-prism {
-  /* tiny css triangle matching the prism app icon */
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 12px solid var(--color-accent);
+  /* tiny gem matching the crystal app icon: rotated square, lit corner */
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, #f2d4fa 0%, var(--color-accent) 55%, var(--color-accent-700) 100%);
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent));
 }
 .tb-name {
