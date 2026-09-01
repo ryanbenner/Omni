@@ -36,7 +36,38 @@ pub fn list_drives() -> Vec<DriveInfo> {
             })
             .collect()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // home first, then every mounted volume; the boot volume shows up
+        // in /Volumes as a symlink so it needs no separate entry
+        let mut v = Vec::new();
+        if let Ok(home) = std::env::var("HOME") {
+            v.push(DriveInfo { path: home, name: "Home".into() });
+        }
+        let mut vols: Vec<DriveInfo> = std::fs::read_dir("/Volumes")
+            .map(|rd| {
+                rd.flatten()
+                    .filter_map(|e| {
+                        let name = e.file_name().to_string_lossy().into_owned();
+                        if name.starts_with('.') {
+                            return None;
+                        }
+                        Some(DriveInfo {
+                            path: e.path().to_string_lossy().into_owned(),
+                            name,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        vols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        v.extend(vols);
+        if v.is_empty() {
+            v.push(DriveInfo { path: "/".into(), name: "Root".into() });
+        }
+        v
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         // dev machines: expose root and home as pseudo-drives
         let mut v = vec![DriveInfo { path: "/".into(), name: "Root".into() }];
@@ -176,5 +207,17 @@ mod tests {
     #[test]
     fn listing_errors_on_missing_dir() {
         assert!(read_dir_entries("/definitely/not/here".into()).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_drives_have_home_and_unique_paths() {
+        let drives = list_drives();
+        assert!(drives.iter().any(|d| d.name == "Home"));
+        assert!(!drives.iter().any(|d| d.name == "Root")); // real volumes, not the dev fallback
+        let mut paths: Vec<_> = drives.iter().map(|d| d.path.clone()).collect();
+        paths.sort();
+        paths.dedup();
+        assert_eq!(paths.len(), drives.len()); // no duplicate volumes
     }
 }
