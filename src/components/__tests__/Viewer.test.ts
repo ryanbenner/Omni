@@ -45,4 +45,24 @@ describe("Viewer", () => {
     expect(exposed.handleAction({ type: "rotate" })).toBe(true);
     expect(exposed.handleAction({ type: "playPause" })).toBe(false);
   });
+
+  it("shows nav arrows on videos and bubbles navigate", async () => {
+    const w = mount(Viewer, { props: { item: videoItem, hasPrev: true, hasNext: false } });
+    const prev = w.find(".nav-arrow.nav-prev");
+    const next = w.find(".nav-arrow.nav-next");
+    expect(prev.exists()).toBe(true);
+    expect(next.attributes("disabled")).toBeDefined();
+    await prev.trigger("click");
+    expect(w.emitted("navigate")).toEqual([[-1]]);
+  });
+
+  it("shows nav arrows on images and bubbles navigate", async () => {
+    const w = mount(Viewer, { props: { item: imageItem, hasPrev: false, hasNext: true } });
+    const prev = w.find(".nav-arrow.nav-prev");
+    const next = w.find(".nav-arrow.nav-next");
+    expect(prev.attributes("disabled")).toBeDefined();
+    expect(next.attributes("disabled")).toBeUndefined();
+    await next.trigger("click");
+    expect(w.emitted("navigate")).toEqual([[1]]);
+  });
 });

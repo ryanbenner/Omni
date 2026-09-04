@@ -106,8 +106,11 @@ async function deleteCurrent() {
           v-if="list.current.value"
           ref="viewer"
           :item="list.current.value"
+          :has-prev="list.currentIndex.value > 0"
+          :has-next="list.currentIndex.value < list.items.value.length - 1"
           @delete-file="deleteCurrent"
           @clip-saved="onClipSaved"
+          @navigate="applyApp({ type: $event === -1 ? 'prevFile' : 'nextFile' })"
         />
         <div v-else class="empty">
           <p v-if="list.error.value" class="error-text">{{ list.error.value }}</p>

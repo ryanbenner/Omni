@@ -7,7 +7,13 @@ import { useImageTransform } from "../composables/useImageTransform";
 import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
 import { parentDir, sepOf } from "../composables/pathUtils";
 
-const props = defineProps<{ item: MediaItem }>();
+const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
+const emit = defineEmits<{ navigate: [dir: -1 | 1] }>();
+
+function navClick(dir: -1 | 1, e: MouseEvent) {
+  emit("navigate", dir);
+  (e.currentTarget as HTMLElement).blur();
+}
 
 const cacheBust = ref(0);
 const saveMsg = ref<string | null>(null);
@@ -172,6 +178,24 @@ defineExpose({ handleAction });
       draggable="false"
       @error="failed = true"
     />
+    <button
+      class="nav-arrow nav-prev"
+      :disabled="!hasPrev"
+      title="Previous file"
+      @pointerdown.stop="menu = null"
+      @click="navClick(-1, $event)"
+    >
+      <i class="ph ph-caret-left" />
+    </button>
+    <button
+      class="nav-arrow nav-next"
+      :disabled="!hasNext"
+      title="Next file"
+      @pointerdown.stop="menu = null"
+      @click="navClick(1, $event)"
+    >
+      <i class="ph ph-caret-right" />
+    </button>
     <div v-if="!failed" class="pill" @pointerdown.stop="menu = null">
       <button class="pill-btn" title="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
         <i class="ph ph-magnifying-glass-minus" />
@@ -246,6 +270,37 @@ defineExpose({ handleAction });
   color: var(--color-neutral-500);
   max-width: 40ch;
   text-align: center;
+}
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 40px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #17181ad9;
+  border: 1px solid var(--color-neutral-900);
+  backdrop-filter: blur(8px);
+  color: var(--color-neutral-400);
+  cursor: pointer;
+  font-size: 20px;
+}
+.nav-arrow:hover:not(:disabled) {
+  color: var(--color-accent-200);
+  background: var(--color-accent-900);
+}
+.nav-arrow:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+.nav-prev {
+  left: 14px;
+}
+.nav-next {
+  right: 14px;
 }
 .pill {
   position: absolute;

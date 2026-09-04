@@ -17,8 +17,14 @@ import {
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 
-const props = defineProps<{ item: MediaItem }>();
-const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string] }>();
+const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
+const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
+
+function navClick(dir: -1 | 1, e: MouseEvent) {
+  emit("navigate", dir);
+  // drop focus so space keeps controlling the video, not this button
+  (e.currentTarget as HTMLElement).blur();
+}
 
 const trim = useTrim();
 const exporter = useExport();
@@ -517,6 +523,26 @@ const progress = computed(() =>
           <i class="ph-fill ph-play" />
         </button>
       </div>
+      <template v-if="!naming && !trim.active.value">
+        <button
+          class="nav-arrow nav-prev"
+          :class="{ hidden: !controlsVisible }"
+          :disabled="!hasPrev"
+          title="Previous file"
+          @click="navClick(-1, $event)"
+        >
+          <i class="ph ph-caret-left" />
+        </button>
+        <button
+          class="nav-arrow nav-next"
+          :class="{ hidden: !controlsVisible }"
+          :disabled="!hasNext"
+          title="Next file"
+          @click="navClick(1, $event)"
+        >
+          <i class="ph ph-caret-right" />
+        </button>
+      </template>
     </div>
     <div
       v-if="!failed"
@@ -694,6 +720,41 @@ const progress = computed(() =>
 .play-badge:hover {
   border-color: var(--color-accent);
   background: #1d1f22cc;
+}
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 40px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #141517b3;
+  border: 1px solid var(--color-neutral-900);
+  color: var(--color-neutral-400);
+  cursor: pointer;
+  font-size: 20px;
+  transition: opacity 0.2s;
+}
+.nav-arrow:hover:not(:disabled) {
+  color: var(--color-accent-300);
+  border-color: var(--color-accent-700);
+}
+.nav-arrow:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+.nav-arrow.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.nav-prev {
+  left: 14px;
+}
+.nav-next {
+  right: 14px;
 }
 .video-error {
   flex: 1;
