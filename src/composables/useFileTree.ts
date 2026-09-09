@@ -160,6 +160,18 @@ export function useFileTree(openFile: (path: string) => void) {
     storePins(pins.value);
   }
 
+  // `to` is an insertion slot in the current order (0..length), the way a
+  // drag indicator between rows reads; the slots on either side of the
+  // dragged row leave the order unchanged
+  function movePin(from: number, to: number) {
+    if (to === from || to === from + 1) return;
+    const next = pins.value.slice();
+    const [pin] = next.splice(from, 1);
+    next.splice(to > from ? to - 1 : to, 0, pin);
+    pins.value = next;
+    storePins(pins.value);
+  }
+
   function isPinned(path: string): boolean {
     return pins.value.some((p) => p.path === path);
   }
@@ -269,6 +281,7 @@ export function useFileTree(openFile: (path: string) => void) {
     setCurrent,
     addPin,
     removePin,
+    movePin,
     isPinned,
     pinClick,
     clearScope,

@@ -51,7 +51,10 @@ watch(menu, (m) => {
   else window.removeEventListener("pointerdown", closeMenu);
 });
 
-onUnmounted(() => window.removeEventListener("pointerdown", closeMenu));
+onUnmounted(() => {
+  window.removeEventListener("pointerdown", closeMenu);
+  endPinDrag();
+});
 
 async function rowClick(row: { kind: string; path: string }) {
   if (row.kind === "file") {
@@ -85,8 +88,59 @@ function togglePinFromMenu() {
   menu.value = null;
 }
 
+// hold-and-drag reorders pins; the drop bar renders at slot `to`
+const DRAG_THRESHOLD = 4;
+const drag = ref<{ from: number; to: number; startY: number; active: boolean } | null>(null);
+let dragMoved = false;
+
 function pinClick(pin: Pin) {
+  // the click that ends a drag must not open the pin
+  if (dragMoved) {
+    dragMoved = false;
+    return;
+  }
   tree.pinClick(pin);
+}
+
+function slotAt(y: number): number {
+  const rows = root.value?.querySelectorAll<HTMLElement>(".pin-row") ?? [];
+  let slot = rows.length;
+  rows.forEach((row, i) => {
+    const r = row.getBoundingClientRect();
+    if (slot === rows.length && y < r.top + r.height / 2) slot = i;
+  });
+  return slot;
+}
+
+function onPinDown(e: PointerEvent, index: number) {
+  if (e.button !== 0) return;
+  drag.value = { from: index, to: index, startY: e.clientY, active: false };
+  dragMoved = false;
+  window.addEventListener("pointermove", onPinMove);
+  window.addEventListener("pointerup", onPinUp);
+  window.addEventListener("pointercancel", endPinDrag);
+}
+
+function onPinMove(e: PointerEvent) {
+  const d = drag.value;
+  if (!d) return;
+  if (!d.active && Math.abs(e.clientY - d.startY) < DRAG_THRESHOLD) return;
+  d.active = true;
+  dragMoved = true;
+  d.to = slotAt(e.clientY);
+}
+
+function onPinUp(e: PointerEvent) {
+  const d = drag.value;
+  if (d?.active) tree.movePin(d.from, slotAt(e.clientY));
+  endPinDrag();
+}
+
+function endPinDrag() {
+  drag.value = null;
+  window.removeEventListener("pointermove", onPinMove);
+  window.removeEventListener("pointerup", onPinUp);
+  window.removeEventListener("pointercancel", endPinDrag);
 }
 
 const renaming = ref<{ path: string; name: string; draft: string } | null>(null);
@@ -165,16 +219,20 @@ async function deleteFromMenu() {
     <div class="scroll">
       <template v-if="tree.pins.value.length">
         <div class="section-label">PINNED</div>
-        <div
-          v-for="p in tree.pins.value"
-          :key="p.path"
-          class="pin-row"
-          @click="pinClick(p)"
-        >
-          <i class="ph ph-push-pin pin-icon" />
-          <span class="row-name">{{ p.name }}</span>
-          <span class="pin-count">{{ p.count }}</span>
-        </div>
+        <template v-for="(p, i) in tree.pins.value" :key="p.path">
+          <div v-if="drag?.active && drag.to === i" class="drop-bar" />
+          <div
+            class="pin-row"
+            :class="{ dragging: drag?.active && drag.from === i }"
+            @pointerdown="onPinDown($event, i)"
+            @click="pinClick(p)"
+          >
+            <i class="ph ph-push-pin pin-icon" />
+            <span class="row-name">{{ p.name }}</span>
+            <span class="pin-count">{{ p.count }}</span>
+          </div>
+        </template>
+        <div v-if="drag?.active && drag.to === tree.pins.value.length" class="drop-bar" />
         <div class="section-divider" />
       </template>
 
@@ -318,6 +376,19 @@ async function deleteFromMenu() {
 }
 .pin-row:hover {
   background: var(--color-neutral-900);
+}
+.pin-row.dragging {
+  opacity: 0.4;
+}
+/* zero net height so rows do not shift while the bar is shown */
+.drop-bar {
+  height: 2px;
+  margin: -1px 8px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 .pin-icon {
   font-size: 13px;

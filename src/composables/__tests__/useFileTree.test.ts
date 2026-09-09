@@ -179,3 +179,42 @@ describe("useFileTree", () => {
     expect(tree.rows.value[0]).toMatchObject({ path: "C:\\", kind: "drive" });
   });
 });
+
+describe("movePin", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    wire();
+  });
+
+  async function threePins() {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Users", "Users");
+    await tree.addPin("C:\\Games", "Games");
+    await tree.addPin("C:\\", "C:");
+    return tree;
+  }
+
+  it("moves a pin down to an insertion slot and persists", async () => {
+    const tree = await threePins();
+    tree.movePin(0, 3); // drop after the last row
+    expect(tree.pins.value.map((p) => p.name)).toEqual(["Games", "C:", "Users"]);
+    const tree2 = useFileTree(() => {});
+    await tree2.init();
+    expect(tree2.pins.value.map((p) => p.name)).toEqual(["Games", "C:", "Users"]);
+  });
+
+  it("moves a pin up", async () => {
+    const tree = await threePins();
+    tree.movePin(2, 0);
+    expect(tree.pins.value.map((p) => p.name)).toEqual(["C:", "Users", "Games"]);
+  });
+
+  it("dropping on either side of the dragged row is a no-op", async () => {
+    const tree = await threePins();
+    tree.movePin(1, 1);
+    tree.movePin(1, 2);
+    expect(tree.pins.value.map((p) => p.name)).toEqual(["Users", "Games", "C:"]);
+  });
+});

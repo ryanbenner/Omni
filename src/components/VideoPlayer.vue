@@ -288,7 +288,48 @@ function setSpeed(v: number) {
   priorRate = v;
 }
 
+// hold-to-fast-forward: pressing on a playing video for longer than a click
+// runs it at 2x until release; a short press still toggles play/pause
+const HOLD_MS = 250;
+const HOLD_RATE = 2;
+const holding = ref(false);
+let holdTimer = 0;
+let holdFired = false;
+
+function onVideoDown(e: PointerEvent) {
+  if (e.button !== 0) return;
+  clearTimeout(holdTimer);
+  holdFired = false;
+  holdTimer = window.setTimeout(() => {
+    const el = video.value;
+    if (!el || el.paused || shuttle.value !== null) return;
+    holding.value = true;
+    holdFired = true;
+    el.playbackRate = HOLD_RATE;
+  }, HOLD_MS);
+}
+
+function endHold() {
+  clearTimeout(holdTimer);
+  if (!holding.value) return;
+  holding.value = false;
+  const el = video.value;
+  // shuttle may have started mid-hold and captured 2x as its restore rate
+  if (el && shuttle.value === null) el.playbackRate = speed.value;
+  priorRate = speed.value;
+}
+
+function onVideoClick() {
+  // the click that ends a hold must not pause the video
+  if (holdFired) {
+    holdFired = false;
+    return;
+  }
+  togglePlay();
+}
+
 const chipLabel = computed(() => {
+  if (holding.value) return HOLD_RATE + "x";
   if (shuttle.value === "fwd") return "0.1x";
   if (shuttle.value === "rev") return "-0.1x";
   return speed.value + "x";
@@ -340,6 +381,7 @@ function hideControls() {
 
 onUnmounted(() => {
   stopRevLoop();
+  clearTimeout(holdTimer);
   clearTimeout(hideTimer);
   clearTimeout(toastTimer);
   window.removeEventListener("pointerdown", closeSpeedMenu);
@@ -353,6 +395,7 @@ watch(src, () => {
   speed.value = 1;
   speedMenuOpen.value = false;
   clearShuttle();
+  endHold();
   naming.value = null;
   if (exporter.running.value) exporter.cancel();
   trim.exit();
@@ -516,7 +559,11 @@ const progress = computed(() =>
         @play="playing = true"
         @pause="playing = false"
         @error="onError"
-        @click="togglePlay"
+        @pointerdown="onVideoDown"
+        @pointerup="endHold"
+        @pointercancel="endHold"
+        @pointerleave="endHold"
+        @click="onVideoClick"
       />
       <div v-if="showBadge" class="badge-layer">
         <button class="play-badge" title="Play (Space)" @click="togglePlay">
