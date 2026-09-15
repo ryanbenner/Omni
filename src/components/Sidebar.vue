@@ -105,30 +105,29 @@ interface FileRow {
   name: string;
   mediaKind?: "video" | "image";
 }
-// ghost generation starts on pointerdown so it is usually ready by dragstart
-let pendingIcon: { path: string; icon: Promise<string> } | null = null;
 let fileDragged = false;
-const THUMB_TIMEOUT = 1500;
 const thumbCache = new Map<string, string>();
+const thumbInFlight = new Set<string>();
 
-// video rows drag with a frame thumbnail; anything else, or a frame that
-// cannot be read in time, uses the name pill
-function dragIcon(row: FileRow): Promise<string> {
-  const pill = filePreview(row.name);
-  if (row.mediaKind !== "video") return Promise.resolve(pill);
-  const cached = thumbCache.get(row.path);
-  if (cached) return Promise.resolve(cached);
-  const timeout = new Promise<string>((r) => setTimeout(() => r(pill), THUMB_TIMEOUT));
-  const thumb = videoThumbnail(convertFileSrc(row.path)).then((t) => {
-    thumbCache.set(row.path, t);
-    return t;
-  });
-  return Promise.race([thumb, timeout]).catch(() => pill);
+// video rows drag with a frame thumbnail, decoded ahead of time on hover or
+// press. dragstart must not wait for it: the os drag has to begin while the
+// pointer is still here, or the app under the cursor only notices the drop
+// once the mouse moves again
+function warmThumbnail(row: FileRow) {
+  if (row.mediaKind !== "video") return;
+  if (thumbCache.has(row.path) || thumbInFlight.has(row.path)) return;
+  thumbInFlight.add(row.path);
+  videoThumbnail(convertFileSrc(row.path))
+    .then((t) => thumbCache.set(row.path, t))
+    .catch(() => {
+      // unreadable now: the pill is used and a later hover tries again
+    })
+    .finally(() => thumbInFlight.delete(row.path));
 }
 
 function onFileDown(e: PointerEvent, row: FileRow) {
   if (e.button !== 0) return;
-  pendingIcon = { path: row.path, icon: dragIcon(row) };
+  warmThumbnail(row);
   fileDragged = false;
 }
 
@@ -136,8 +135,7 @@ async function onFileDragStart(e: Event, row: FileRow) {
   // must come first: with the browser drag cancelled the pointer is free for
   // the os drag session
   e.preventDefault();
-  const icon = await (pendingIcon?.path === row.path ? pendingIcon.icon : dragIcon(row));
-  pendingIcon = null;
+  const icon = thumbCache.get(row.path) ?? filePreview(row.name);
   fileDragged = true;
   try {
     // copy: the destination gets a copy and the source file stays put
@@ -311,6 +309,7 @@ async function deleteFromMenu() {
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
         :draggable="row.kind === 'file' && renaming?.path !== row.path"
+        @pointerenter="row.kind === 'file' && warmThumbnail(row)"
         @pointerdown="row.kind === 'file' && onFileDown($event, row)"
         @dragstart="row.kind === 'file' && onFileDragStart($event, row)"
       >

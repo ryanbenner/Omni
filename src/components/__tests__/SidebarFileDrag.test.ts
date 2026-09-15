@@ -104,8 +104,11 @@ describe("Sidebar file drag out", () => {
 
   it("dragstart on an image row cancels the browser drag and starts a native copy drag", async () => {
     const w = await mountOpen();
-    const e = await holdAndDrag(w, row(w, "shot.png"));
+    const el = row(w, "shot.png");
+    await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
+    const e = await dragStart(w, el);
     expect(e.defaultPrevented).toBe(true);
+    // requested synchronously so the os drag begins where the pointer is now
     expect(startDragMock).toHaveBeenCalledTimes(1);
     expect(startDragMock.mock.calls[0][0]).toEqual({
       item: [IMAGE],
@@ -115,38 +118,57 @@ describe("Sidebar file drag out", () => {
     expect(thumbMock).not.toHaveBeenCalled();
   });
 
-  it("a video row drags with a frame thumbnail taken from its asset url", async () => {
+  it("hovering a video row warms a frame thumbnail that the drag then uses", async () => {
     const w = await mountOpen();
-    await holdAndDrag(w, row(w, "a_clip.mp4"));
-    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
-    expect(startDragMock.mock.calls[0][0]).toEqual({ item: [VIDEO], icon: "thumb", mode: "copy" });
-  });
-
-  it("dragstart without a prior pointerdown still drags", async () => {
-    const w = await mountOpen();
-    await dragStart(w, row(w, "a_clip.mp4"));
+    const el = row(w, "a_clip.mp4");
+    await fire(w, el, "pointerenter", {});
     await flushPromises();
+    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
+    await holdAndDrag(w, el);
     expect(startDragMock.mock.calls[0][0]).toEqual({ item: [VIDEO], icon: "thumb", mode: "copy" });
+    // cached: a second hover or drag does not decode the video again
+    await fire(w, el, "pointerenter", {});
+    await holdAndDrag(w, el);
+    expect(thumbMock).toHaveBeenCalledTimes(1);
+    expect(startDragMock.mock.calls[1][0].icon).toBe("thumb");
   });
 
-  it("falls back to the name pill when the thumbnail cannot be read", async () => {
-    thumbMock.mockRejectedValue(new Error("nope"));
-    const w = await mountOpen();
-    await holdAndDrag(w, row(w, "a_clip.mp4"));
-    expect(startDragMock.mock.calls[0][0].icon).toBe("pill:a_clip.mp4");
-  });
-
-  it("falls back to the name pill when the thumbnail takes too long", async () => {
-    vi.useFakeTimers();
-    thumbMock.mockReturnValue(new Promise(() => {}));
+  it("starts the drag immediately with the pill when the thumbnail is not ready yet", async () => {
+    let resolveThumb: (s: string) => void = () => {};
+    thumbMock.mockReturnValue(new Promise<string>((r) => (resolveThumb = r)));
     const w = await mountOpen();
     const el = row(w, "a_clip.mp4");
     await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
     await dragStart(w, el);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(startDragMock).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(600);
+    // no awaiting: the native drag is requested within the dragstart turn
+    expect(startDragMock).toHaveBeenCalledTimes(1);
     expect(startDragMock.mock.calls[0][0].icon).toBe("pill:a_clip.mp4");
+    resolveThumb("thumb");
+    await flushPromises();
+    // the late thumbnail is kept for the next drag
+    await holdAndDrag(w, el);
+    expect(startDragMock.mock.calls[1][0].icon).toBe("thumb");
+  });
+
+  it("pressing on a video row also warms the thumbnail", async () => {
+    const w = await mountOpen();
+    await fire(w, row(w, "a_clip.mp4"), "pointerdown", { button: 0, clientX: 10, clientY: 10 });
+    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
+  });
+
+  it("a thumbnail that cannot be read is retried later and the pill is used meanwhile", async () => {
+    thumbMock.mockRejectedValueOnce(new Error("nope"));
+    const w = await mountOpen();
+    const el = row(w, "a_clip.mp4");
+    await fire(w, el, "pointerenter", {});
+    await flushPromises();
+    await dragStart(w, el);
+    expect(startDragMock.mock.calls[0][0].icon).toBe("pill:a_clip.mp4");
+    await fire(w, el, "pointerenter", {});
+    await flushPromises();
+    expect(thumbMock).toHaveBeenCalledTimes(2);
+    await dragStart(w, el);
+    expect(startDragMock.mock.calls[1][0].icon).toBe("thumb");
   });
 
   it("the release that ends a drag does not open the file, later clicks do", async () => {
