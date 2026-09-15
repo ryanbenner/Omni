@@ -2,8 +2,10 @@
 import { nextTick, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
 import { parentDir } from "../composables/pathUtils";
+import { filePreview } from "../composables/dragPreview";
 import type { Pin } from "../types";
 
 const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
@@ -54,10 +56,16 @@ watch(menu, (m) => {
 onUnmounted(() => {
   window.removeEventListener("pointerdown", closeMenu);
   endPinDrag();
+  endFileDrag();
 });
 
 async function rowClick(row: { kind: string; path: string }) {
   if (row.kind === "file") {
+    // the click that ends a drag-out must not open the file
+    if (fileDragged) {
+      fileDragged = false;
+      return;
+    }
     emit("openFile", row.path);
     return;
   }
@@ -88,8 +96,44 @@ function togglePinFromMenu() {
   menu.value = null;
 }
 
-// hold-and-drag reorders pins; the drop bar renders at slot `to`
 const DRAG_THRESHOLD = 4;
+
+// hold-and-drag on a file row hands it to the os as a native drag so it can
+// be dropped into other apps (discord, explorer...). html5 dragstart is not
+// an option: tauri's own drag-drop handling swallows it on windows
+let fileDrag: { path: string; name: string; startX: number; startY: number } | null = null;
+let fileDragged = false;
+
+function onFileDown(e: PointerEvent, row: { path: string; name: string }) {
+  if (e.button !== 0) return;
+  fileDrag = { path: row.path, name: row.name, startX: e.clientX, startY: e.clientY };
+  fileDragged = false;
+  window.addEventListener("pointermove", onFileMove);
+  window.addEventListener("pointerup", endFileDrag);
+  window.addEventListener("pointercancel", endFileDrag);
+}
+
+function onFileMove(e: PointerEvent) {
+  const d = fileDrag;
+  if (!d) return;
+  const moved = Math.max(Math.abs(e.clientX - d.startX), Math.abs(e.clientY - d.startY));
+  if (moved < DRAG_THRESHOLD) return;
+  // the os owns the pointer from here; no further move/up events arrive
+  endFileDrag();
+  fileDragged = true;
+  startDrag({ item: [d.path], icon: filePreview(d.name) }).catch(() => {
+    fileDragged = false;
+  });
+}
+
+function endFileDrag() {
+  fileDrag = null;
+  window.removeEventListener("pointermove", onFileMove);
+  window.removeEventListener("pointerup", endFileDrag);
+  window.removeEventListener("pointercancel", endFileDrag);
+}
+
+// hold-and-drag reorders pins; the drop bar renders at slot `to`
 const drag = ref<{ from: number; to: number; startY: number; active: boolean } | null>(null);
 let dragMoved = false;
 
@@ -245,6 +289,7 @@ async function deleteFromMenu() {
         :title="row.name"
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
+        @pointerdown="row.kind === 'file' && onFileDown($event, row)"
       >
         <span v-for="g in row.guides" :key="g" class="guide" />
         <template v-if="row.kind !== 'file'">
