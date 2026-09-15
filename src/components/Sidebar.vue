@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
 import { parentDir } from "../composables/pathUtils";
-import { filePreview } from "../composables/dragPreview";
+import { filePreview, videoThumbnail } from "../composables/dragPreview";
 import type { Pin } from "../types";
 
 const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
@@ -101,13 +101,51 @@ const DRAG_THRESHOLD = 4;
 // hold-and-drag on a file row hands it to the os as a native drag so it can
 // be dropped into other apps (discord, explorer...). html5 dragstart is not
 // an option: tauri's own drag-drop handling swallows it on windows
-let fileDrag: { path: string; name: string; startX: number; startY: number } | null = null;
+interface FileRow {
+  path: string;
+  name: string;
+  mediaKind?: "video" | "image";
+}
+let fileDrag: {
+  row: FileRow;
+  startX: number;
+  startY: number;
+  // the ghost image once generated
+  icon: string | null;
+  // pointer passed the threshold before the ghost image was ready
+  armed: boolean;
+} | null = null;
 let fileDragged = false;
+const THUMB_TIMEOUT = 1500;
+const thumbCache = new Map<string, string>();
 
-function onFileDown(e: PointerEvent, row: { path: string; name: string }) {
+// video rows drag with a frame thumbnail; anything else, or a frame that
+// cannot be read in time, uses the name pill
+function dragIcon(row: FileRow): Promise<string> {
+  const pill = filePreview(row.name);
+  if (row.mediaKind !== "video") return Promise.resolve(pill);
+  const cached = thumbCache.get(row.path);
+  if (cached) return Promise.resolve(cached);
+  const timeout = new Promise<string>((r) => setTimeout(() => r(pill), THUMB_TIMEOUT));
+  const thumb = videoThumbnail(convertFileSrc(row.path)).then((t) => {
+    thumbCache.set(row.path, t);
+    return t;
+  });
+  return Promise.race([thumb, timeout]).catch(() => pill);
+}
+
+function onFileDown(e: PointerEvent, row: FileRow) {
   if (e.button !== 0) return;
-  fileDrag = { path: row.path, name: row.name, startX: e.clientX, startY: e.clientY };
+  const d = { row, startX: e.clientX, startY: e.clientY, icon: null as string | null, armed: false };
+  fileDrag = d;
   fileDragged = false;
+  // the ghost is generated during the hold; if the pointer already crossed
+  // the threshold by the time it is ready, start the drag from here
+  dragIcon(row).then((icon) => {
+    if (fileDrag !== d) return;
+    d.icon = icon;
+    if (d.armed) beginFileDrag(icon);
+  });
   window.addEventListener("pointermove", onFileMove);
   window.addEventListener("pointerup", endFileDrag);
   window.addEventListener("pointercancel", endFileDrag);
@@ -115,15 +153,32 @@ function onFileDown(e: PointerEvent, row: { path: string; name: string }) {
 
 function onFileMove(e: PointerEvent) {
   const d = fileDrag;
-  if (!d) return;
+  if (!d || d.armed) return;
   const moved = Math.max(Math.abs(e.clientX - d.startX), Math.abs(e.clientY - d.startY));
   if (moved < DRAG_THRESHOLD) return;
+  d.armed = true;
+  // otherwise the ghost callback in onFileDown starts the drag once ready
+  if (d.icon) beginFileDrag(d.icon);
+}
+
+async function beginFileDrag(icon: string) {
+  const d = fileDrag;
+  if (!d) return;
   // the os owns the pointer from here; no further move/up events arrive
   endFileDrag();
   fileDragged = true;
-  startDrag({ item: [d.path], icon: filePreview(d.name) }).catch(() => {
-    fileDragged = false;
-  });
+  try {
+    // copy: the destination gets a copy and the source file stays put
+    await startDrag({ item: [d.row.path], icon, mode: "copy" });
+  } catch (e) {
+    await message(String(e), { title: "Drag failed", kind: "error" });
+  } finally {
+    // the drag has ended (dropped or cancelled); swallow only the click, if
+    // any, that the same button release produces, then arm clicks again
+    setTimeout(() => {
+      fileDragged = false;
+    }, 300);
+  }
 }
 
 function endFileDrag() {
