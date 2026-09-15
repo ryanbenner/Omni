@@ -57,14 +57,24 @@ async function fire(w: ReturnType<typeof mount>, el: Element, type: string, init
   await w.vm.$nextTick();
 }
 
+// the browser fires dragstart once the held pointer moves; jsdom has no
+// DragEvent, a cancelable Event carries what the handler needs
+async function dragStart(w: ReturnType<typeof mount>, el: Element) {
+  const e = new Event("dragstart", { bubbles: true, cancelable: true });
+  el.dispatchEvent(e);
+  await w.vm.$nextTick();
+  return e;
+}
+
 function row(w: ReturnType<typeof mount>, name: string) {
   return w.findAll(".tree-row").find((r) => r.attributes("title") === name)!.element;
 }
 
-async function holdAndMove(w: ReturnType<typeof mount>, el: Element) {
+async function holdAndDrag(w: ReturnType<typeof mount>, el: Element) {
   await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-  await fire(w, el, "pointermove", { clientX: 30, clientY: 10 });
+  const e = await dragStart(w, el);
   await flushPromises();
+  return e;
 }
 
 describe("Sidebar file drag out", () => {
@@ -86,15 +96,16 @@ describe("Sidebar file drag out", () => {
     vi.useRealTimers();
   });
 
-  it("hold and move on an image row starts a copy drag with the name pill", async () => {
+  it("file rows are draggable, folder rows are not", async () => {
     const w = await mountOpen();
-    const el = row(w, "shot.png");
-    await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    await fire(w, el, "pointermove", { clientX: 12, clientY: 10 });
-    await flushPromises();
-    expect(startDragMock).not.toHaveBeenCalled();
-    await fire(w, el, "pointermove", { clientX: 20, clientY: 10 });
-    await flushPromises();
+    expect(row(w, "shot.png").getAttribute("draggable")).toBe("true");
+    expect(w.findAll(".tree-row")[0].attributes("draggable")).not.toBe("true");
+  });
+
+  it("dragstart on an image row cancels the browser drag and starts a native copy drag", async () => {
+    const w = await mountOpen();
+    const e = await holdAndDrag(w, row(w, "shot.png"));
+    expect(e.defaultPrevented).toBe(true);
     expect(startDragMock).toHaveBeenCalledTimes(1);
     expect(startDragMock.mock.calls[0][0]).toEqual({
       item: [IMAGE],
@@ -102,23 +113,26 @@ describe("Sidebar file drag out", () => {
       mode: "copy",
     });
     expect(thumbMock).not.toHaveBeenCalled();
-    // further movement in the same hold does not start a second drag
-    await fire(w, el, "pointermove", { clientX: 40, clientY: 10 });
-    await flushPromises();
-    expect(startDragMock).toHaveBeenCalledTimes(1);
   });
 
   it("a video row drags with a frame thumbnail taken from its asset url", async () => {
     const w = await mountOpen();
-    await holdAndMove(w, row(w, "a_clip.mp4"));
+    await holdAndDrag(w, row(w, "a_clip.mp4"));
     expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
+    expect(startDragMock.mock.calls[0][0]).toEqual({ item: [VIDEO], icon: "thumb", mode: "copy" });
+  });
+
+  it("dragstart without a prior pointerdown still drags", async () => {
+    const w = await mountOpen();
+    await dragStart(w, row(w, "a_clip.mp4"));
+    await flushPromises();
     expect(startDragMock.mock.calls[0][0]).toEqual({ item: [VIDEO], icon: "thumb", mode: "copy" });
   });
 
   it("falls back to the name pill when the thumbnail cannot be read", async () => {
     thumbMock.mockRejectedValue(new Error("nope"));
     const w = await mountOpen();
-    await holdAndMove(w, row(w, "a_clip.mp4"));
+    await holdAndDrag(w, row(w, "a_clip.mp4"));
     expect(startDragMock.mock.calls[0][0].icon).toBe("pill:a_clip.mp4");
   });
 
@@ -128,24 +142,11 @@ describe("Sidebar file drag out", () => {
     const w = await mountOpen();
     const el = row(w, "a_clip.mp4");
     await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    await fire(w, el, "pointermove", { clientX: 30, clientY: 10 });
+    await dragStart(w, el);
     await vi.advanceTimersByTimeAsync(1000);
     expect(startDragMock).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(600);
     expect(startDragMock.mock.calls[0][0].icon).toBe("pill:a_clip.mp4");
-  });
-
-  it("releasing before the thumbnail is ready does not start a drag", async () => {
-    let resolveThumb: (s: string) => void = () => {};
-    thumbMock.mockReturnValue(new Promise<string>((r) => (resolveThumb = r)));
-    const w = await mountOpen();
-    const el = row(w, "a_clip.mp4");
-    await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    await fire(w, el, "pointermove", { clientX: 30, clientY: 10 });
-    await fire(w, el, "pointerup", { clientX: 30, clientY: 10 });
-    resolveThumb("thumb");
-    await flushPromises();
-    expect(startDragMock).not.toHaveBeenCalled();
   });
 
   it("the release that ends a drag does not open the file, later clicks do", async () => {
@@ -153,7 +154,7 @@ describe("Sidebar file drag out", () => {
     const w = await mountOpen();
     const el = row(w, "shot.png");
     await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    await fire(w, el, "pointermove", { clientX: 30, clientY: 10 });
+    await dragStart(w, el);
     await vi.advanceTimersByTimeAsync(0);
     expect(startDragMock).toHaveBeenCalledTimes(1);
     await fire(w, el, "click", {});
@@ -183,7 +184,7 @@ describe("Sidebar file drag out", () => {
     const w = await mountOpen();
     const el = row(w, "shot.png");
     await fire(w, el, "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    await fire(w, el, "pointermove", { clientX: 30, clientY: 10 });
+    await dragStart(w, el);
     await vi.advanceTimersByTimeAsync(0);
     expect(messageMock).toHaveBeenCalledWith("os said no", { title: "Drag failed", kind: "error" });
     await vi.advanceTimersByTimeAsync(400);
@@ -191,23 +192,5 @@ describe("Sidebar file drag out", () => {
     await fire(w, el, "pointerup", { clientX: 10, clientY: 10 });
     await fire(w, el, "click", {});
     expect(w.emitted("openFile")).toEqual([[IMAGE]]);
-  });
-
-  it("folder rows do not start a drag", async () => {
-    invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
-      if (cmd === "read_dir_entries")
-        return Promise.resolve({ folders: [{ path: "C:\\clips", name: "clips" }], files: [] });
-      return Promise.reject(`unexpected ${cmd}`);
-    });
-    const w = mount(Sidebar, {
-      props: { currentPath: null, currentFolder: null },
-      attachTo: document.body,
-    });
-    await flushPromises();
-    await fire(w, w.findAll(".tree-row")[0].element, "click", {});
-    await flushPromises();
-    await holdAndMove(w, row(w, "clips"));
-    expect(startDragMock).not.toHaveBeenCalled();
   });
 });

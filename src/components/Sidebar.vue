@@ -56,7 +56,6 @@ watch(menu, (m) => {
 onUnmounted(() => {
   window.removeEventListener("pointerdown", closeMenu);
   endPinDrag();
-  endFileDrag();
 });
 
 async function rowClick(row: { kind: string; path: string }) {
@@ -96,25 +95,18 @@ function togglePinFromMenu() {
   menu.value = null;
 }
 
-const DRAG_THRESHOLD = 4;
-
-// hold-and-drag on a file row hands it to the os as a native drag so it can
-// be dropped into other apps (discord, explorer...). html5 dragstart is not
-// an option: tauri's own drag-drop handling swallows it on windows
+// file rows are draggable so the browser fires dragstart once the held
+// pointer moves; the handler cancels the browser's own drag and hands the
+// file to the os as a native drag (the plugin's documented pattern, and the
+// only trigger that works in webview2). starting from raw pointer events
+// does nothing on windows
 interface FileRow {
   path: string;
   name: string;
   mediaKind?: "video" | "image";
 }
-let fileDrag: {
-  row: FileRow;
-  startX: number;
-  startY: number;
-  // the ghost image once generated
-  icon: string | null;
-  // pointer passed the threshold before the ghost image was ready
-  armed: boolean;
-} | null = null;
+// ghost generation starts on pointerdown so it is usually ready by dragstart
+let pendingIcon: { path: string; icon: Promise<string> } | null = null;
 let fileDragged = false;
 const THUMB_TIMEOUT = 1500;
 const thumbCache = new Map<string, string>();
@@ -136,42 +128,22 @@ function dragIcon(row: FileRow): Promise<string> {
 
 function onFileDown(e: PointerEvent, row: FileRow) {
   if (e.button !== 0) return;
-  const d = { row, startX: e.clientX, startY: e.clientY, icon: null as string | null, armed: false };
-  fileDrag = d;
+  pendingIcon = { path: row.path, icon: dragIcon(row) };
   fileDragged = false;
-  // the ghost is generated during the hold; if the pointer already crossed
-  // the threshold by the time it is ready, start the drag from here
-  dragIcon(row).then((icon) => {
-    if (fileDrag !== d) return;
-    d.icon = icon;
-    if (d.armed) beginFileDrag(icon);
-  });
-  window.addEventListener("pointermove", onFileMove);
-  window.addEventListener("pointerup", endFileDrag);
-  window.addEventListener("pointercancel", endFileDrag);
 }
 
-function onFileMove(e: PointerEvent) {
-  const d = fileDrag;
-  if (!d || d.armed) return;
-  const moved = Math.max(Math.abs(e.clientX - d.startX), Math.abs(e.clientY - d.startY));
-  if (moved < DRAG_THRESHOLD) return;
-  d.armed = true;
-  // otherwise the ghost callback in onFileDown starts the drag once ready
-  if (d.icon) beginFileDrag(d.icon);
-}
-
-async function beginFileDrag(icon: string) {
-  const d = fileDrag;
-  if (!d) return;
-  // the os owns the pointer from here; no further move/up events arrive
-  endFileDrag();
+async function onFileDragStart(e: Event, row: FileRow) {
+  // must come first: with the browser drag cancelled the pointer is free for
+  // the os drag session
+  e.preventDefault();
+  const icon = await (pendingIcon?.path === row.path ? pendingIcon.icon : dragIcon(row));
+  pendingIcon = null;
   fileDragged = true;
   try {
     // copy: the destination gets a copy and the source file stays put
-    await startDrag({ item: [d.row.path], icon, mode: "copy" });
-  } catch (e) {
-    await message(String(e), { title: "Drag failed", kind: "error" });
+    await startDrag({ item: [row.path], icon, mode: "copy" });
+  } catch (err) {
+    await message(String(err), { title: "Drag failed", kind: "error" });
   } finally {
     // the drag has ended (dropped or cancelled); swallow only the click, if
     // any, that the same button release produces, then arm clicks again
@@ -181,14 +153,8 @@ async function beginFileDrag(icon: string) {
   }
 }
 
-function endFileDrag() {
-  fileDrag = null;
-  window.removeEventListener("pointermove", onFileMove);
-  window.removeEventListener("pointerup", endFileDrag);
-  window.removeEventListener("pointercancel", endFileDrag);
-}
-
 // hold-and-drag reorders pins; the drop bar renders at slot `to`
+const DRAG_THRESHOLD = 4;
 const drag = ref<{ from: number; to: number; startY: number; active: boolean } | null>(null);
 let dragMoved = false;
 
@@ -344,7 +310,9 @@ async function deleteFromMenu() {
         :title="row.name"
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
+        :draggable="row.kind === 'file' && renaming?.path !== row.path"
         @pointerdown="row.kind === 'file' && onFileDown($event, row)"
+        @dragstart="row.kind === 'file' && onFileDragStart($event, row)"
       >
         <span v-for="g in row.guides" :key="g" class="guide" />
         <template v-if="row.kind !== 'file'">
