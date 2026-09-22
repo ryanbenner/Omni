@@ -74,6 +74,37 @@ describe("Sidebar pin drag", () => {
     expect(names(w)).toEqual(["B", "A", "C"]);
   });
 
+  it("a ghost pill with the held pin's name follows the pointer", async () => {
+    const w = await mountWithPins();
+    const rows = w.findAll(".pin-row");
+    await fire(w, rows[0].element, "pointerdown", { button: 0, clientX: 20, clientY: 13 });
+    expect(w.find(".drag-ghost").exists()).toBe(false);
+    await fire(w, rows[0].element, "pointermove", { clientX: 30, clientY: 45 });
+    const ghost = w.find(".drag-ghost");
+    expect(ghost.exists()).toBe(true);
+    expect(ghost.text()).toBe("A");
+    expect((ghost.element as HTMLElement).style.transform).toBe("translate(30px, 45px)");
+    await fire(w, rows[0].element, "pointerup", { clientX: 30, clientY: 45 });
+    expect(w.find(".drag-ghost").exists()).toBe(false);
+  });
+
+  it("no drop bar is shown at a slot that would not move the pin", async () => {
+    const w = await mountWithPins();
+    const rows = w.findAll(".pin-row");
+    await fire(w, rows[1].element, "pointerdown", { button: 0, clientY: 39 });
+    // upper half of B itself: slot 1, directly above the held row
+    await fire(w, rows[1].element, "pointermove", { clientY: 30 });
+    expect(w.find(".drop-bar").exists()).toBe(false);
+    // lower half of B: slot 2, directly below the held row
+    await fire(w, rows[1].element, "pointermove", { clientY: 48 });
+    expect(w.find(".drop-bar").exists()).toBe(false);
+    // lower half of C: slot 3, a real move
+    await fire(w, rows[1].element, "pointermove", { clientY: 70 });
+    expect(w.find(".drop-bar").exists()).toBe(true);
+    await fire(w, rows[1].element, "pointerup", { clientY: 48 });
+    expect(names(w)).toEqual(["A", "B", "C"]);
+  });
+
   it("a plain click still opens the pin and does not reorder", async () => {
     const w = await mountWithPins();
     const rows = w.findAll(".pin-row");

@@ -151,10 +151,23 @@ async function onFileDragStart(e: Event, row: FileRow) {
   }
 }
 
-// hold-and-drag reorders pins; the drop bar renders at slot `to`
+// hold-and-drag reorders pins; the drop bar renders at slot `to` and a ghost
+// pill with the pin's name follows the pointer at (x, y)
 const DRAG_THRESHOLD = 4;
-const drag = ref<{ from: number; to: number; startY: number; active: boolean } | null>(null);
+const drag = ref<{
+  from: number;
+  to: number;
+  startY: number;
+  active: boolean;
+  x: number;
+  y: number;
+} | null>(null);
 let dragMoved = false;
+
+// a slot directly above or below the held row would not move it
+function isMove(d: { from: number; to: number }) {
+  return d.to !== d.from && d.to !== d.from + 1;
+}
 
 function pinClick(pin: Pin) {
   // the click that ends a drag must not open the pin
@@ -177,7 +190,14 @@ function slotAt(y: number): number {
 
 function onPinDown(e: PointerEvent, index: number) {
   if (e.button !== 0) return;
-  drag.value = { from: index, to: index, startY: e.clientY, active: false };
+  drag.value = {
+    from: index,
+    to: index,
+    startY: e.clientY,
+    active: false,
+    x: e.clientX,
+    y: e.clientY,
+  };
   dragMoved = false;
   window.addEventListener("pointermove", onPinMove);
   window.addEventListener("pointerup", onPinUp);
@@ -191,6 +211,8 @@ function onPinMove(e: PointerEvent) {
   d.active = true;
   dragMoved = true;
   d.to = slotAt(e.clientY);
+  d.x = e.clientX;
+  d.y = e.clientY;
 }
 
 function onPinUp(e: PointerEvent) {
@@ -283,7 +305,7 @@ async function deleteFromMenu() {
       <template v-if="tree.pins.value.length">
         <div class="section-label">PINNED</div>
         <template v-for="(p, i) in tree.pins.value" :key="p.path">
-          <div v-if="drag?.active && drag.to === i" class="drop-bar" />
+          <div v-if="drag?.active && drag.to === i && isMove(drag)" class="drop-bar" />
           <div
             class="pin-row"
             :class="{ dragging: drag?.active && drag.from === i }"
@@ -295,7 +317,10 @@ async function deleteFromMenu() {
             <span class="pin-count">{{ p.count }}</span>
           </div>
         </template>
-        <div v-if="drag?.active && drag.to === tree.pins.value.length" class="drop-bar" />
+        <div
+          v-if="drag?.active && drag.to === tree.pins.value.length && isMove(drag)"
+          class="drop-bar"
+        />
         <div class="section-divider" />
       </template>
 
@@ -391,6 +416,13 @@ async function deleteFromMenu() {
         </button>
       </template>
     </div>
+    <div
+      v-if="drag?.active"
+      class="drag-ghost"
+      :style="{ transform: `translate(${drag.x}px, ${drag.y}px)` }"
+    >
+      {{ tree.pins.value[drag.from]?.name }}
+    </div>
   </aside>
 </template>
 
@@ -449,13 +481,45 @@ async function deleteFromMenu() {
 }
 /* zero net height so rows do not shift while the bar is shown */
 .drop-bar {
-  height: 2px;
-  margin: -1px 8px;
-  border-radius: 1px;
+  height: 3px;
+  margin: -1.5px 8px;
+  border-radius: 2px;
   background: var(--color-accent);
+  box-shadow: 0 0 6px var(--color-accent-700);
   position: relative;
   z-index: 1;
   pointer-events: none;
+}
+.drop-bar::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -2.5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* sit just below and right of the pointer so the cursor never covers it */
+  margin: 12px 0 0 14px;
+  z-index: 100;
+  max-width: 180px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-accent-900);
+  border: 1px solid var(--color-accent-700);
+  color: var(--color-accent-100);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
 }
 .pin-icon {
   font-size: 13px;
