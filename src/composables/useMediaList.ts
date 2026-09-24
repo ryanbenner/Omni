@@ -4,7 +4,7 @@ import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import type { DirListing, MediaItem, ScanResult } from "../types";
 import { parentDir } from "./pathUtils";
 
-const WATCH_DEBOUNCE_MS = 300;
+const WATCH_DEBOUNCE_MS = 600;
 
 export function useMediaList() {
   const items = ref<MediaItem[]>([]);

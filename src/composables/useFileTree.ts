@@ -22,7 +22,7 @@ interface NodeState {
 }
 
 // fs events for one folder are coalesced into a single re-read
-const WATCH_DEBOUNCE_MS = 300;
+const WATCH_DEBOUNCE_MS = 600;
 
 const PINS_KEY = "mv-pins";
 
