@@ -12,9 +12,7 @@ edition = "2021"
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "media_viewer_lib"
-# desktop only: the exe links the rlib; staticlib/cdylib exist for mobile
-# and would make windows link the whole tauri stack twice more per build
-crate-type = ["rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
