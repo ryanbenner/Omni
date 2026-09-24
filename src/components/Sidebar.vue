@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -53,8 +53,13 @@ watch(menu, (m) => {
   else window.removeEventListener("pointerdown", closeMenu);
 });
 
+// catches what the fs watcher misses (network volumes, sleep)
+const onFocus = () => tree.resync();
+onMounted(() => window.addEventListener("focus", onFocus));
+
 onUnmounted(() => {
   window.removeEventListener("pointerdown", closeMenu);
+  window.removeEventListener("focus", onFocus);
   endPinDrag();
 });
 

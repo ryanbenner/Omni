@@ -6,6 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(), message: vi.fn() }));
+vi.mock("@tauri-apps/plugin-fs", () => ({ watch: () => Promise.resolve(() => {}) }));
 
 import Sidebar from "../Sidebar.vue";
 
@@ -127,5 +128,34 @@ describe("Sidebar pin drag", () => {
     await flushPromises();
     expect(names(w)).toEqual(["C", "A", "B"]);
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).not.toContain("C");
+  });
+});
+
+describe("Sidebar focus resync", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    wire();
+  });
+
+  // a pin path no other test uses, so sidebars left mounted by earlier
+  // tests cannot answer the focus event for it
+  it("re-reads pinned folders when the window regains focus", async () => {
+    localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Z", name: "Z", count: 0 }]));
+    const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null } });
+    await flushPromises();
+    const readsOfZ = () =>
+      invokeMock.mock.calls.filter((c) => c[0] === "read_dir_entries" && c[1].path === "C:\\Z")
+        .length;
+    invokeMock.mockClear();
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    expect(readsOfZ()).toBe(1);
+    w.unmount();
+    invokeMock.mockClear();
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    expect(readsOfZ()).toBe(0);
   });
 });

@@ -4,6 +4,11 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+const watchMock = vi.fn();
+const unwatchMock = vi.fn();
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  watch: (...args: unknown[]) => watchMock(...args),
+}));
 
 import { useFileTree } from "../useFileTree";
 import type { DirListing, DriveInfo } from "../../types";
@@ -23,6 +28,7 @@ const gamesListing: DirListing = {
 };
 
 function wire() {
+  watchMock.mockImplementation(() => Promise.resolve(() => {}));
   invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
     if (cmd === "list_drives") return Promise.resolve(drives);
     if (cmd === "read_dir_entries") {
@@ -216,5 +222,91 @@ describe("movePin", () => {
     tree.movePin(1, 1);
     tree.movePin(1, 2);
     expect(tree.pins.value.map((p) => p.name)).toEqual(["Users", "Games", "C:"]);
+  });
+});
+
+describe("live updates", () => {
+  // callbacks registered through the fs watcher, keyed by watched dir
+  const watchers = new Map<string, () => void>();
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const reads = (path: string) =>
+    invokeMock.mock.calls.filter((c) => c[0] === "read_dir_entries" && c[1]?.path === path)
+      .length;
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    wire();
+    watchers.clear();
+    watchMock.mockReset();
+    unwatchMock.mockReset();
+    watchMock.mockImplementation((path: string, cb: () => void) => {
+      watchers.set(path, cb);
+      return Promise.resolve(() => {
+        watchers.delete(path);
+        unwatchMock(path);
+      });
+    });
+  });
+
+  it("re-expanding a collapsed folder reads it from disk again", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\");
+    await tree.toggle("C:\\");
+    await tree.toggle("C:\\");
+    expect(reads("C:\\")).toBe(2);
+  });
+
+  it("an expanded folder is watched until it collapses", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\");
+    expect(watchMock).toHaveBeenCalledWith(
+      "C:\\",
+      expect.any(Function),
+      expect.objectContaining({ recursive: false }),
+    );
+    await tree.toggle("C:\\");
+    await flush();
+    expect(unwatchMock).toHaveBeenCalledWith("C:\\");
+  });
+
+  it("pinned folders stay watched while collapsed", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Users", "Users");
+    await flush();
+    expect(watchers.has("C:\\Users")).toBe(true);
+    tree.removePin("C:\\Users");
+    await flush();
+    expect(unwatchMock).toHaveBeenCalledWith("C:\\Users");
+  });
+
+  it("a change in a watched folder re-reads it", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\");
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users"]);
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "read_dir_entries"
+        ? Promise.resolve({ folders: [{ path: "C:\\Games", name: "Games" }], files: [] })
+        : Promise.reject("unexpected"),
+    );
+    watchers.get("C:\\")!();
+    await flush();
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Games"]);
+  });
+
+  it("resync re-reads every watched folder", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\");
+    await tree.addPin("C:\\Users", "Users");
+    const root = reads("C:\\");
+    const users = reads("C:\\Users");
+    await tree.resync();
+    expect(reads("C:\\")).toBe(root + 1);
+    expect(reads("C:\\Users")).toBe(users + 1);
   });
 });

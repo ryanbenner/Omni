@@ -1,6 +1,10 @@
 import { computed, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import type { MediaItem, ScanResult } from "../types";
+import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
+import type { DirListing, MediaItem, ScanResult } from "../types";
+import { parentDir } from "./pathUtils";
+
+const WATCH_DEBOUNCE_MS = 300;
 
 export function useMediaList() {
   const items = ref<MediaItem[]>([]);
@@ -16,11 +20,46 @@ export function useMediaList() {
       items.value = result.items;
       currentIndex.value = result.startIndex;
       error.value = null;
+      watchFolder(parentDir(path));
     } catch (e) {
       items.value = [];
       currentIndex.value = 0;
       error.value = String(e);
     }
+  }
+
+  // the open file's folder is watched so clips recorded mid-session join
+  // the next/prev list; the current file is re-found by path so the viewer
+  // stays put. if it vanished, the next-older file slides into its slot,
+  // matching removeItem
+  let watched: { dir: string; unwatch: Promise<UnwatchFn> } | null = null;
+
+  async function resync() {
+    if (!watched) return;
+    const dir = watched.dir;
+    const curPath = current.value?.path;
+    let listing: DirListing;
+    try {
+      listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+    } catch {
+      return; // folder unreadable right now: keep the list as it was
+    }
+    if (watched?.dir !== dir) return; // user moved on during the read
+    const found = listing.files.findIndex((it) => it.path === curPath);
+    items.value = listing.files;
+    currentIndex.value =
+      found >= 0 ? found : Math.max(0, Math.min(currentIndex.value, items.value.length - 1));
+  }
+
+  function watchFolder(dir: string) {
+    if (watched?.dir === dir) return;
+    watched?.unwatch.then((u) => u()).catch(() => {});
+    const unwatch = watchDir(dir, () => resync(), {
+      recursive: false,
+      delayMs: WATCH_DEBOUNCE_MS,
+    });
+    unwatch.catch(() => {}); // unwatchable folder: focus resync still works
+    watched = { dir, unwatch };
   }
 
   function jumpTo(index: number) {
@@ -78,5 +117,6 @@ export function useMediaList() {
     jumpTo,
     removeItem,
     renameItem,
+    resync,
   };
 }

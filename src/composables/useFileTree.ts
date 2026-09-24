@@ -1,5 +1,6 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch as vueWatch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import type { DirListing, DriveInfo, Pin } from "../types";
 import { ancestorDirs, displayLabel } from "./pathUtils";
 
@@ -17,9 +18,11 @@ export interface TreeRow {
 
 interface NodeState {
   open: boolean;
-  loaded: boolean;
   listing: DirListing | null;
 }
+
+// fs events for one folder are coalesced into a single re-read
+const WATCH_DEBOUNCE_MS = 300;
 
 const PINS_KEY = "mv-pins";
 
@@ -66,21 +69,21 @@ export function useFileTree(openFile: (path: string) => void) {
   function node(path: string): NodeState {
     let n = nodes.value.get(path);
     if (!n) {
-      n = { open: false, loaded: false, listing: null };
+      n = { open: false, listing: null };
       nodes.value.set(path, n);
     }
     return n;
   }
 
+  // always hits the disk: a folder collapsed and re-expanded later must
+  // show what was added while it was closed
   async function load(path: string) {
     const n = node(path);
-    if (n.loaded) return;
     try {
       n.listing = await invoke<DirListing>("read_dir_entries", { path });
     } catch {
       n.listing = { folders: [], files: [] };
     }
-    n.loaded = true;
     version.value++;
   }
 
@@ -201,16 +204,45 @@ export function useFileTree(openFile: (path: string) => void) {
     version.value++;
   }
 
-  // re-read a directory after a file was deleted or renamed inside it
+  // re-read a directory after something inside it changed
   async function refresh(dirPath: string) {
-    const n = nodes.value.get(dirPath);
-    if (n) {
-      n.loaded = false;
-      n.listing = null;
-      if (n.open) await load(dirPath);
-    }
+    if (nodes.value.get(dirPath)?.open) await load(dirPath);
     if (isPinned(dirPath)) refreshPinCount(dirPath);
     version.value++;
+  }
+
+  // the os watches exactly the folders on screen: every expanded node plus
+  // every pin (so counts stay live while collapsed). collapsed folders need
+  // no watcher because expanding always re-reads.
+  const watched = new Map<string, Promise<UnwatchFn>>();
+  const wanted = computed(() => {
+    void version.value;
+    const set = new Set(pins.value.map((p) => p.path));
+    for (const [path, n] of nodes.value) if (n.open) set.add(path);
+    return set;
+  });
+  function reconcileWatchers() {
+    for (const path of wanted.value) {
+      if (watched.has(path)) continue;
+      const p = watchDir(path, () => refresh(path), {
+        recursive: false,
+        delayMs: WATCH_DEBOUNCE_MS,
+      });
+      // unwatchable (permissions, network volume): resync covers it
+      p.catch(() => watched.delete(path));
+      watched.set(path, p);
+    }
+    for (const [path, p] of watched) {
+      if (wanted.value.has(path)) continue;
+      watched.delete(path);
+      p.then((unwatch) => unwatch()).catch(() => {});
+    }
+  }
+  vueWatch(wanted, reconcileWatchers, { flush: "sync" });
+
+  // re-read everything watched, for when the window regains focus
+  async function resync() {
+    await Promise.all([...watched.keys()].map(refresh));
   }
 
   function walk(path: string, name: string, kind: "drive" | "folder", depth: number, out: TreeRow[]) {
@@ -286,6 +318,7 @@ export function useFileTree(openFile: (path: string) => void) {
     pinClick,
     clearScope,
     refresh,
+    resync,
     openFile,
   };
 }

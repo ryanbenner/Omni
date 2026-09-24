@@ -45,6 +45,7 @@ function pathFromArgv(argv: string[]): string | null {
 }
 
 onMounted(async () => {
+  window.addEventListener("focus", () => list.resync());
   await listen<string[]>("single-instance", (e) => {
     const path = pathFromArgv(e.payload);
     if (path) list.openFile(path);
