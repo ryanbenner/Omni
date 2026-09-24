@@ -6,6 +6,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  # tests run beside the build, not before it, so they never add wall time
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: install frontend deps
+        run: npm ci
+
+      - name: frontend tests
+        run: npm test
+
+      # tauri's build script insists the sidecar exists; tests never run it
+      - name: placeholder ffmpeg sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          New-Item -ItemType File -Force -Path src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe | Out-Null
+
+      - name: build frontend for rust codegen
+        run: npm run build
+
+      - name: rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -42,14 +78,8 @@ jobs:
           Copy-Item ffmpeg-extract/ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
           Remove-Item -Recurse -Force ffmpeg-extract, ffmpeg.zip
 
-      - name: frontend tests
-        run: npm test
-
       - name: build frontend for rust codegen
         run: npm run build
-
-      - name: rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: build installer
         run: npm run tauri build
