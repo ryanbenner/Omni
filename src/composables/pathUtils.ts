@@ -40,3 +40,8 @@ export function displayLabel(name: string, isFile: boolean): string {
   if (!isFile) return name;
   return name.replace(/^([A-Za-z0-9]+) (?=\d{4}\.)/, "");
 }
+
+export function joinPath(dir: string, name: string): string {
+  const sep = sepOf(dir);
+  return dir.endsWith(sep) ? dir + name : dir + sep + name;
+}

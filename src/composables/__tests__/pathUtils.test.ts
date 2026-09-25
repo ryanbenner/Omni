@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ancestorDirs, parentDir, displayLabel } from "../pathUtils";
+import { ancestorDirs, parentDir, displayLabel, joinPath } from "../pathUtils";
 
 describe("ancestorDirs", () => {
   it("walks windows paths from the drive root", () => {
@@ -37,5 +37,14 @@ describe("displayLabel", () => {
   it("leaves folders and non-dated names alone", () => {
     expect(displayLabel("Valorant", false)).toBe("Valorant");
     expect(displayLabel("bladerunner.jpg", true)).toBe("bladerunner.jpg");
+  });
+});
+
+describe("joinPath", () => {
+  it("adds a separator only when the folder lacks one", () => {
+    expect(joinPath("C:\\Pics", "a.jpg")).toBe("C:\\Pics\\a.jpg");
+    expect(joinPath("C:\\", "a.jpg")).toBe("C:\\a.jpg");
+    expect(joinPath("/home/x", "a.jpg")).toBe("/home/x/a.jpg");
+    expect(joinPath("/", "a.jpg")).toBe("/a.jpg");
   });
 });

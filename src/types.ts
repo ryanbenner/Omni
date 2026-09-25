@@ -52,3 +52,37 @@ export interface Pin {
   name: string;
   count: number;
 }
+
+export type ExportFormat = "png" | "jpg";
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+// a picture placed on the wall. x/y/w/h are the footprint in wall pixels
+// after rotation; nw/nh are the file's natural pixel size
+export interface CollageItem {
+  id: string;
+  kind: "image";
+  path: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  nw: number;
+  nh: number;
+  rotation: 0 | 90 | 180 | 270;
+  z: number;
+  thumb?: string;
+}
+
+export interface CollageDoc {
+  version: 1;
+  items: CollageItem[];
+  view: { x: number; y: number; zoom: number };
+  lockAspect: boolean;
+  exportFormat: ExportFormat;
+}
