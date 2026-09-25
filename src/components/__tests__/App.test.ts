@@ -62,6 +62,8 @@ const WallStub = defineComponent({
 vi.mock("../CollageWall.vue", () => ({ __esModule: true, default: WallStub }));
 
 import App from "../../App.vue";
+import Sidebar from "../Sidebar.vue";
+import { message } from "@tauri-apps/plugin-dialog";
 import { emptyDoc } from "../../composables/collageFile";
 
 const scan = (path: string) => ({
@@ -83,6 +85,7 @@ describe("App collage routing", () => {
     wallSpies.dirty = false;
     closeHandlers.length = 0;
     destroyMock.mockReset();
+    vi.mocked(message).mockReset();
     localStorage.clear();
     document.body.innerHTML = "";
   });
@@ -171,6 +174,121 @@ describe("App collage routing", () => {
     await flushPromises();
     expect(readCollageMock).toHaveBeenCalledWith("/p/weekend.collage");
     expect(w.find(".wall-stub").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("the wall's exit event runs the leave gate; a refusal stays, a yes reopens the last picture", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    wallSpies.requestLeave.mockResolvedValue(false);
+    w.findComponent(WallStub).vm.$emit("exit", "/p/last.jpg");
+    await flushPromises();
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(false);
+    expect(w.find(".wall-stub").exists()).toBe(true);
+    wallSpies.requestLeave.mockResolvedValue(true);
+    w.findComponent(WallStub).vm.$emit("exit", "/p/last.jpg");
+    await flushPromises();
+    expect(w.find(".wall-stub").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg" });
+    w.unmount();
+  });
+
+  it("the c key on the wall leaves through the gate and reopens the last picture", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
+    await flushPromises();
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(false);
+    expect(w.find(".wall-stub").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg" });
+    w.unmount();
+  });
+
+  it("the viewer's collage button seeds the wall with the open picture", async () => {
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    await w.find(".pill-btn[data-tip='Collage mode (C)']").trigger("click");
+    await flushPromises();
+    expect(w.findComponent(WallStub).props("init").seedPaths).toEqual(["/p/a.jpg"]);
+    w.unmount();
+  });
+
+  it("the sidebar's Collage entry seeds with the open picture, alone when nothing is open, and adds once open", async () => {
+    const w = await mountApp();
+    w.findComponent(Sidebar).vm.$emit("addToCollage", "/p/b.png");
+    await flushPromises();
+    expect(w.findComponent(WallStub).props("init").seedPaths).toEqual(["/p/b.png"]);
+    w.findComponent(Sidebar).vm.$emit("addToCollage", "/p/c.png");
+    expect(wallSpies.addPaths).toHaveBeenCalledWith(["/p/c.png"]);
+    w.unmount();
+
+    const w2 = await mountApp();
+    await app(w2).openFile("/p/a.jpg");
+    await flushPromises();
+    w2.findComponent(Sidebar).vm.$emit("addToCollage", "/p/b.png");
+    await flushPromises();
+    expect(w2.findComponent(WallStub).props("init").seedPaths).toEqual(["/p/a.jpg", "/p/b.png"]);
+    w2.unmount();
+  });
+
+  it("closing the window with a clean wall lets the close through", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    const prevent = vi.fn();
+    await closeHandlers[0]({ preventDefault: prevent });
+    expect(prevent).not.toHaveBeenCalled();
+    expect(wallSpies.requestLeave).not.toHaveBeenCalled();
+    expect(destroyMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("a bad collage opened over a picture reports through a dialog", async () => {
+    readCollageMock.mockRejectedValue(new Error("unsupported collage version 9"));
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    await app(w).openFile("/p/w.collage");
+    await flushPromises();
+    expect(message).toHaveBeenCalledWith(expect.stringContaining("unsupported collage version 9"), {
+      title: "Couldn't open collage",
+      kind: "error",
+    });
+    w.unmount();
+  });
+
+  it("a collage error does not outlive the next file open", async () => {
+    readCollageMock.mockRejectedValue(new Error("unsupported collage version 9"));
+    const w = await mountApp();
+    await app(w).openFile("/p/w.collage");
+    await flushPromises();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "scan_media") return Promise.reject("scan failed");
+      if (cmd === "list_drives") return Promise.resolve([]);
+      if (cmd === "read_dir_entries") return Promise.resolve({ folders: [], files: [] });
+      return Promise.reject(`unexpected ${cmd}`);
+    });
+    await app(w).openFile("/p/x.jpg");
+    await flushPromises();
+    expect(w.find(".error-text").text()).toBe("scan failed");
+    w.unmount();
+  });
+
+  it("before the wall chunk mounts, a video open or the c key still leaves", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await app(w).openFile("/p/v.mp4");
+    await flushPromises();
+    expect(w.find(".wall-stub").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/v.mp4" });
+
+    app(w).enterCollage([]);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
+    await flushPromises();
+    expect(w.find(".wall-stub").exists()).toBe(false);
     w.unmount();
   });
 });

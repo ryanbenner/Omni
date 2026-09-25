@@ -86,22 +86,25 @@ async function openCollage(path: string) {
     collageInit.value = { doc, path };
   } catch (e) {
     collageInit.value = null;
-    collageError.value = `Couldn't open ${path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1)}: ${e instanceof Error ? e.message : e}`;
+    const text = `Couldn't open ${path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1)}: ${e instanceof Error ? e.message : e}`;
+    // the inline error only shows on the empty screen
+    if (list.current.value) await message(text, { title: "Couldn't open collage", kind: "error" });
+    else collageError.value = text;
   }
 }
 
+// a wall that has not mounted yet has nothing to lose
 async function leaveCollage(): Promise<boolean> {
-  if (!wall.value) return true;
-  if (!(await wall.value.requestLeave(false))) return false;
-  const last = wall.value.lastPath();
+  if (wall.value && !(await wall.value.requestLeave(false))) return false;
+  const last = wall.value?.lastPath() ?? null;
   collageInit.value = null;
   collageStatus.value = "";
   if (last) await list.openFile(last);
   return true;
 }
 
-function onWallExit(lastPath: string | null) {
-  // the wall already ran its own gate before emitting
+async function onWallExit(lastPath: string | null) {
+  if (wall.value && !(await wall.value.requestLeave(false))) return;
   collageInit.value = null;
   collageStatus.value = "";
   if (lastPath) list.openFile(lastPath);
@@ -119,10 +122,11 @@ async function openFile(path: string) {
       await wall.value?.addPaths([path]);
       return;
     }
-    if (!(await wall.value?.requestLeave(false))) return;
+    if (wall.value && !(await wall.value.requestLeave(false))) return;
     collageInit.value = null;
     collageStatus.value = "";
   }
+  collageError.value = null;
   await list.openFile(path);
 }
 
