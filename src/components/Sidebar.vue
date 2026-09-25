@@ -6,7 +6,7 @@ import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
 import { parentDir } from "../composables/pathUtils";
 import { filePreview, videoThumbnail } from "../composables/dragPreview";
-import type { Pin } from "../types";
+import type { MediaKind, Pin } from "../types";
 
 const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
 const emit = defineEmits<{
@@ -108,7 +108,7 @@ function togglePinFromMenu() {
 interface FileRow {
   path: string;
   name: string;
-  mediaKind?: "video" | "image";
+  mediaKind?: MediaKind;
 }
 let fileDragged = false;
 const thumbCache = new Map<string, string>();
@@ -361,12 +361,20 @@ async function deleteFromMenu() {
           <span class="thumb-chip">
             <i
               class="ph"
-              :class="row.mediaKind === 'video' ? 'ph-film-slate' : 'ph-image'"
+              :class="
+                row.mediaKind === 'video'
+                  ? 'ph-film-slate'
+                  : row.mediaKind === 'collage'
+                    ? 'ph-images'
+                    : 'ph-image'
+              "
               :style="{
                 color:
                   row.mediaKind === 'video'
                     ? 'var(--color-accent-400)'
-                    : 'var(--color-neutral-500)',
+                    : row.mediaKind === 'collage'
+                      ? 'var(--color-accent-300)'
+                      : 'var(--color-neutral-500)',
               }"
             />
           </span>

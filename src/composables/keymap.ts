@@ -1,4 +1,4 @@
-import type { AppAction, ViewerAction } from "../types";
+import type { AppAction, MediaKind, ViewerAction } from "../types";
 
 export type Command =
   | { target: "app"; action: AppAction }
@@ -8,7 +8,7 @@ type KeyInput = { key: string; shiftKey: boolean };
 
 export function resolveKey(
   e: KeyInput,
-  kind: "video" | "image" | null,
+  kind: MediaKind | null,
 ): Command | null {
   if (kind === null) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -75,7 +75,7 @@ export function resolveKey(
 // keyup matters only for hold-to-shuttle: releasing < or > ends the shuttle
 export function resolveKeyUp(
   e: KeyInput,
-  kind: "video" | "image" | null,
+  kind: MediaKind | null,
 ): Command | null {
   if (kind !== "video") return null;
   switch (e.key) {

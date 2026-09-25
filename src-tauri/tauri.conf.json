@@ -49,6 +49,12 @@
         "name": "Image",
         "description": "Image file",
         "role": "Viewer"
+      },
+      {
+        "ext": ["collage"],
+        "name": "Collage",
+        "description": "Omni collage",
+        "role": "Editor"
       }
     ]
   },

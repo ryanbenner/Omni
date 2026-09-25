@@ -1,6 +1,8 @@
+export type MediaKind = "video" | "image" | "collage";
+
 export interface MediaItem {
   path: string;
-  kind: "video" | "image";
+  kind: MediaKind;
   name: string;
   mtime: number;
   size: number;

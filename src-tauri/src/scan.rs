@@ -4,6 +4,8 @@ use std::time::UNIX_EPOCH;
 
 const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "mov"];
 const IMAGE_EXTS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic"];
+// omni's own layout file; listed in the tree, never a next/prev neighbor
+const COLLAGE_EXTS: &[&str] = &["collage"];
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +30,8 @@ pub fn kind_for(path: &Path) -> Option<&'static str> {
         Some("video")
     } else if IMAGE_EXTS.contains(&ext.as_str()) {
         Some("image")
+    } else if COLLAGE_EXTS.contains(&ext.as_str()) {
+        Some("collage")
     } else {
         None
     }
@@ -71,7 +75,9 @@ pub fn scan_media(path: String) -> Result<ScanResult, String> {
     let mut items = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
         if let Some(item) = media_item_from_entry(&entry) {
-            items.push(item);
+            if item.kind != "collage" {
+                items.push(item);
+            }
         }
     }
     sort_items(&mut items);
@@ -111,8 +117,20 @@ mod tests {
         assert_eq!(kind_for(Path::new("a.JPG")), Some("image"));
         assert_eq!(kind_for(Path::new("a.jpeg")), Some("image"));
         assert_eq!(kind_for(Path::new("a.heic")), Some("image"));
+        assert_eq!(kind_for(Path::new("wall.collage")), Some("collage"));
         assert_eq!(kind_for(Path::new("a.txt")), None);
         assert_eq!(kind_for(Path::new("noext")), None);
+    }
+
+    #[test]
+    fn scan_skips_collage_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let pic = dir.path().join("a.jpg");
+        File::create(&pic).unwrap();
+        File::create(dir.path().join("wall.collage")).unwrap();
+        let out = scan_media(pic.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(out.items.len(), 1);
+        assert_eq!(out.items[0].name, "a.jpg");
     }
 
     #[test]

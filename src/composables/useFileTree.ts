@@ -1,7 +1,7 @@
 import { computed, ref, watch as vueWatch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
-import type { DirListing, DriveInfo, Pin } from "../types";
+import type { DirListing, DriveInfo, MediaKind, Pin } from "../types";
 import { ancestorDirs, displayLabel } from "./pathUtils";
 
 export interface TreeRow {
@@ -9,7 +9,7 @@ export interface TreeRow {
   name: string;
   label: string;
   kind: "drive" | "folder" | "file";
-  mediaKind?: "video" | "image";
+  mediaKind?: MediaKind;
   depth: number;
   guides: number;
   open: boolean;
