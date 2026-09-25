@@ -86,3 +86,74 @@ input[type="range"] {
   pointer-events: none;
   z-index: 30;
 }
+/* in-app dialogs: the native ones cannot follow the theme */
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0b0ccc;
+}
+.dialog {
+  min-width: 340px;
+  max-width: 90%;
+  padding: 18px 20px 14px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  box-shadow: 0 12px 40px #000a;
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+.dialog-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.dialog-body {
+  margin: 0 0 16px;
+  color: var(--color-neutral-400);
+  font-size: 13px;
+}
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.btn-accent,
+.btn-outline {
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-accent {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #fff;
+}
+.btn-accent:hover {
+  background: var(--color-accent-600);
+}
+.btn-outline {
+  background: var(--color-bg);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent-200);
+}
+.btn-outline:hover {
+  background: var(--color-accent-900);
+}
+.dialog-cancel {
+  display: block;
+  margin: 12px 0 0 auto;
+  background: none;
+  border: none;
+  color: var(--color-neutral-500);
+  font-size: 12px;
+  cursor: pointer;
+}
+.dialog-cancel:hover {
+  color: var(--color-neutral-300);
+}
