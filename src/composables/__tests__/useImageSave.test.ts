@@ -1,5 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { canSave, saveAsName, mimeFor } from "../useImageSave";
+import { describe, it, expect, vi } from "vitest";
+
+const writeFileMock = vi.fn();
+const renameMock = vi.fn();
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  writeFile: (...a: unknown[]) => writeFileMock(...a),
+  rename: (...a: unknown[]) => renameMock(...a),
+}));
+
+import { canSave, saveAsName, mimeFor, writeImageBytes } from "../useImageSave";
 
 describe("canSave", () => {
   it("requires a nonzero rotation and a re-encodable format", () => {
@@ -34,5 +42,15 @@ describe("mimeFor", () => {
     expect(mimeFor("png")).toBe("image/png");
     expect(mimeFor("webp")).toBe("image/webp");
     expect(mimeFor("gif")).toBe("image/png");
+  });
+});
+
+describe("writeImageBytes", () => {
+  it("writes to a temp sibling then renames over the target", async () => {
+    writeFileMock.mockClear();
+    renameMock.mockClear();
+    await writeImageBytes("/p/out.png", new Uint8Array([1]));
+    expect(writeFileMock).toHaveBeenCalledWith("/p/out.png.omnitmp", new Uint8Array([1]));
+    expect(renameMock).toHaveBeenCalledWith("/p/out.png.omnitmp", "/p/out.png");
   });
 });

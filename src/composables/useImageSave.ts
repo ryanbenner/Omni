@@ -26,6 +26,13 @@ export function mimeFor(ext: string): string {
   return "image/png";
 }
 
+// write to a temp sibling then rename so a failed write never truncates the target
+export async function writeImageBytes(destPath: string, bytes: Uint8Array): Promise<void> {
+  const tmp = destPath + ".omnitmp";
+  await writeFile(tmp, bytes);
+  await rename(tmp, destPath);
+}
+
 // read bytes via fs plugin (avoids canvas taint from the asset protocol),
 // bake the rotation on a canvas, write bytes back
 export async function saveRotated(
@@ -57,8 +64,5 @@ export async function saveRotated(
     );
   });
   const bytes2 = new Uint8Array(await blob.arrayBuffer());
-  // write to a temp sibling then rename so a failed write never truncates the target
-  const tmp = destPath + ".omnitmp";
-  await writeFile(tmp, bytes2);
-  await rename(tmp, destPath);
+  await writeImageBytes(destPath, bytes2);
 }
