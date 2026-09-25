@@ -15,6 +15,15 @@ export function bytesAt(level: number, natural: { w: number; h: number }): numbe
   return Math.round(natural.w * s) * Math.round(natural.h * s) * 4;
 }
 
+// largest power of two strictly below `level`, floored at MIN_LEVEL; a natural-size
+// level (not itself a power of two) steps down to the largest power of two below it
+function stepDownLevel(level: number): number {
+  if (level <= MIN_LEVEL) return MIN_LEVEL;
+  let p = MIN_LEVEL;
+  while (p * 2 < level) p *= 2;
+  return p;
+}
+
 export type Decoder = (
   path: string,
   level: number,
@@ -30,7 +39,10 @@ interface Entry {
   maxLevel: number; // 0 = uncapped; set when stepped down to make room
   visible: boolean;
   hiddenAt: number; // tick when it went off-screen; lower evicts first
-  pending: Promise<ImageBitmap | null> | null;
+  reservedBytes: number; // bytes claimed for an in-flight decode, before it commits
+  generation: number; // bumped by release/forget to void a decode already in flight
+  pendingLevel: number | null;
+  pendingPromise: Promise<ImageBitmap | null> | null;
 }
 
 export interface DecodeBudget {
@@ -50,11 +62,25 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
   const version = ref(0);
   const entries = new Map<string, Entry>();
   let tick = 0;
+  let reservedTotal = 0; // bytes claimed by decodes in flight, not yet committed
 
   function entry(id: string, path: string, natural: { w: number; h: number }): Entry {
     let e = entries.get(id);
     if (!e) {
-      e = { path, natural, bitmap: null, level: 0, bytes: 0, maxLevel: 0, visible: false, hiddenAt: 0, pending: null };
+      e = {
+        path,
+        natural,
+        bitmap: null,
+        level: 0,
+        bytes: 0,
+        maxLevel: 0,
+        visible: false,
+        hiddenAt: 0,
+        reservedBytes: 0,
+        generation: 0,
+        pendingLevel: null,
+        pendingPromise: null,
+      };
       entries.set(id, e);
     }
     return e;
@@ -70,12 +96,21 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
     e.level = 0;
   }
 
-  function held(): number {
-    return bytes.value;
+  function reserve(e: Entry, level: number) {
+    e.reservedBytes = bytesAt(level, e.natural);
+    reservedTotal += e.reservedBytes;
   }
 
+  function unreserve(e: Entry) {
+    reservedTotal -= e.reservedBytes;
+    e.reservedBytes = 0;
+  }
+
+  // committed bytes plus everything reserved for decodes in flight, so a batch of
+  // concurrent requests can't all pass this check before any of them has committed
   function fits(self: Entry, level: number): boolean {
-    return held() - self.bytes + bytesAt(level, self.natural) <= cap;
+    const total = bytes.value + reservedTotal - self.bytes - self.reservedBytes;
+    return total + bytesAt(level, self.natural) <= cap;
   }
 
   // off-screen decodes go first, oldest hidden first
@@ -97,7 +132,7 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
       .filter((e) => e !== self && e.bitmap && e.visible && e.level > MIN_LEVEL)
       .sort((a, b) => b.bytes - a.bytes);
     for (const e of visible) {
-      e.maxLevel = Math.max(MIN_LEVEL, e.level / 2);
+      e.maxLevel = stepDownLevel(e.level);
       drop(e);
       version.value++;
       if (fits(self, level)) return;
@@ -106,29 +141,45 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
 
   function grantedLevel(self: Entry, level: number): number {
     let l = self.maxLevel ? Math.min(level, self.maxLevel) : level;
-    while (l > MIN_LEVEL && !fits(self, l)) l /= 2;
+    while (l > MIN_LEVEL && !fits(self, l)) l = stepDownLevel(l);
     return l;
   }
 
-  async function request(id: string, path: string, level: number, natural: { w: number; h: number }) {
-    const e = entry(id, path, natural);
-    // setVisible may have created a placeholder entry with dummy dims before
-    // the first request; always refresh to the real natural size here
-    e.path = path;
-    e.natural = natural;
-    if (e.bitmap && e.level === level) return e.bitmap;
-    if (e.pending) return e.pending;
-    const run = (async () => {
+  function startDecode(
+    e: Entry,
+    id: string,
+    path: string,
+    level: number,
+    natural: { w: number; h: number },
+  ): Promise<ImageBitmap | null> {
+    const gen = e.generation;
+    const run = (async (): Promise<ImageBitmap | null> => {
       evictHidden(e, level);
       const l = grantedLevel(e, level);
       if (!fits(e, l)) stepDownVisible(e, l);
+      // even after sacrificing other visible decodes there may be no room left
+      // (nothing above 64 to drop); grant the minimum anyway, a small overshoot,
+      // rather than resolving null, which the wall reads as "missing"
       if (e.bitmap && e.level === l) return e.bitmap;
+      reserve(e, l);
       let bmp: ImageBitmap;
       try {
         bmp = await decode(path, l, natural);
       } catch {
-        drop(e);
+        unreserve(e);
+        if (e.generation === gen && entries.get(id) === e) drop(e);
         return null;
+      }
+      unreserve(e);
+      if (e.generation !== gen || entries.get(id) !== e) {
+        // id was released or forgotten while this decode was in flight
+        bmp.close();
+        return null;
+      }
+      if (e.maxLevel && l > e.maxLevel) {
+        // the cap tightened under us while we were decoding; redo at the new cap
+        bmp.close();
+        return startDecode(e, id, path, e.maxLevel, natural);
       }
       drop(e);
       e.bitmap = bmp;
@@ -138,17 +189,43 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
       loaded.value++;
       return bmp;
     })();
-    e.pending = run;
-    try {
-      return await run;
-    } finally {
-      e.pending = null;
+    e.pendingLevel = level;
+    e.pendingPromise = run;
+    run.finally(() => {
+      if (e.pendingPromise === run) {
+        e.pendingPromise = null;
+        e.pendingLevel = null;
+      }
+    });
+    return run;
+  }
+
+  async function request(
+    id: string,
+    path: string,
+    level: number,
+    natural: { w: number; h: number },
+  ): Promise<ImageBitmap | null> {
+    const e = entry(id, path, natural);
+    // setVisible may have created a placeholder entry with dummy dims before
+    // the first request; always refresh to the real natural size here
+    e.path = path;
+    e.natural = natural;
+    if (e.bitmap && e.level === level) return e.bitmap;
+    if (e.pendingPromise) {
+      if (e.pendingLevel === level) return e.pendingPromise;
+      // a different level is wanted: let the in-flight decode settle, then retry
+      await e.pendingPromise;
+      return request(id, path, level, natural);
     }
+    return startDecode(e, id, path, level, natural);
   }
 
   function release(id: string) {
     const e = entries.get(id);
     if (!e) return;
+    e.generation++;
+    unreserve(e);
     drop(e);
     e.maxLevel = 0;
   }
@@ -162,6 +239,8 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
   function forget(id: string) {
     const e = entries.get(id);
     if (!e) return;
+    e.generation++;
+    unreserve(e);
     drop(e);
     entries.delete(id);
   }

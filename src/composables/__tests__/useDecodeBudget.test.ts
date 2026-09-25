@@ -14,6 +14,14 @@ const decoder = vi.fn((_p: string, level: number, natural: { w: number; h: numbe
 );
 const nat = { w: 4000, h: 2000 };
 
+function deferredBitmap() {
+  let resolve!: (b: ImageBitmap) => void;
+  const promise = new Promise<ImageBitmap>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe("levelFor and bytesAt", () => {
   it("rounds up to a power of two, floors at 64, caps at natural", () => {
     expect(levelFor(1, 4000)).toBe(MIN_LEVEL);
@@ -117,5 +125,116 @@ describe("useDecodeBudget", () => {
     b.forget("a");
     expect(b.bytes.value).toBe(0);
     expect(b.levelOf("a")).toBe(0);
+  });
+
+  it("does not call the decoder again when the granted level, after eviction, matches what is already held", async () => {
+    const cap = bytesAt(512, nat) + 10;
+    const b = useDecodeBudget(decoder, cap);
+    decoder.mockClear();
+    b.setVisible("a", true);
+    await b.request("a", "/a.jpg", 512, nat);
+    expect(decoder).toHaveBeenCalledTimes(1);
+    const got = await b.request("a", "/a.jpg", 1024, nat); // won't fit; steps back to what's already held
+    expect(got?.width).toBe(512);
+    expect(decoder).toHaveBeenCalledTimes(1);
+  });
+
+  it("reserves bytes for concurrent requests, so the cap holds before either decode resolves", async () => {
+    const cap = bytesAt(512, nat) + bytesAt(256, nat) + 10;
+    const b = useDecodeBudget(decoder, cap);
+    b.setVisible("a", true);
+    b.setVisible("b", true);
+    const [gotA, gotB] = await Promise.all([
+      b.request("a", "/a.jpg", 512, nat),
+      b.request("b", "/b.jpg", 512, nat),
+    ]);
+    expect(gotA?.width).toBe(512);
+    expect(gotB?.width).toBe(256);
+    expect(b.bytes.value).toBeLessThanOrEqual(cap);
+  });
+
+  it("forget during a pending decode discards the result and closes the bitmap", async () => {
+    const { promise, resolve } = deferredBitmap();
+    const slow = vi.fn(() => promise);
+    const b = useDecodeBudget(slow);
+    b.setVisible("a", true);
+    const p = b.request("a", "/a.jpg", 512, nat);
+    b.forget("a");
+    const decoded = bmp(512, nat);
+    resolve(decoded);
+    expect(await p).toBeNull();
+    expect(b.bytes.value).toBe(0);
+    expect(b.loaded.value).toBe(0);
+    expect((decoded as unknown as { close: () => void }).close).toHaveBeenCalled();
+  });
+
+  it("release during a pending decode discards the result and closes the bitmap", async () => {
+    const { promise, resolve } = deferredBitmap();
+    const slow = vi.fn(() => promise);
+    const b = useDecodeBudget(slow);
+    b.setVisible("a", true);
+    const p = b.request("a", "/a.jpg", 512, nat);
+    b.release("a");
+    const decoded = bmp(512, nat);
+    resolve(decoded);
+    expect(await p).toBeNull();
+    expect(b.bytes.value).toBe(0);
+    expect(b.loaded.value).toBe(0);
+    expect((decoded as unknown as { close: () => void }).close).toHaveBeenCalled();
+  });
+
+  it("steps a non-power-of-two natural-size request down through powers of two, not fractional levels", async () => {
+    const cap = bytesAt(MIN_LEVEL, nat) + 10;
+    const b = useDecodeBudget(decoder, cap);
+    decoder.mockClear();
+    b.setVisible("x", true);
+    await b.request("x", "/x.jpg", 4000, nat);
+    expect(decoder).toHaveBeenCalledWith("/x.jpg", MIN_LEVEL, nat);
+    expect(b.levelOf("x")).toBe(MIN_LEVEL);
+  });
+
+  it("the first step down from a natural, non-power-of-two level lands on the largest power of two below it", async () => {
+    const cap = bytesAt(2048, nat) + 10;
+    const b = useDecodeBudget(decoder, cap);
+    decoder.mockClear();
+    b.setVisible("x", true);
+    await b.request("x", "/x.jpg", 4000, nat);
+    expect(decoder).toHaveBeenCalledWith("/x.jpg", 2048, nat);
+  });
+
+  it("stepping down a visible decode from its natural (non-power-of-two) level lands on the largest power of two below it", async () => {
+    const cap = bytesAt(4000, nat) + bytesAt(MIN_LEVEL, nat) - 1;
+    const b = useDecodeBudget(decoder, cap);
+    b.setVisible("a", true);
+    b.setVisible("b", true);
+    await b.request("a", "/a.jpg", 4000, nat);
+    await b.request("b", "/b.jpg", MIN_LEVEL, nat);
+    expect(b.levelOf("a")).toBe(0);
+    expect(b.levelOf("b")).toBe(MIN_LEVEL);
+    const again = await b.request("a", "/a.jpg", 4000, nat);
+    expect(again?.width).toBe(2048);
+  });
+
+  it("re-clamps a pending upgrade if the cap tightens under it before the decode resolves", async () => {
+    const { promise, resolve } = deferredBitmap();
+    let calls = 0;
+    const flaky = vi.fn((_p: string, level: number, natural: { w: number; h: number }) => {
+      calls++;
+      return calls === 2 ? promise : Promise.resolve(bmp(level, natural));
+    });
+    const cap = bytesAt(1024, nat) + bytesAt(MIN_LEVEL, nat) + 10;
+    const b = useDecodeBudget(flaky, cap);
+    b.setVisible("a", true);
+    await b.request("a", "/a.jpg", 512, nat);
+    const upgrade = b.request("a", "/a.jpg", 1024, nat); // call 2: held open until we resolve it
+    b.setVisible("c", true);
+    const cReq = b.request("c", "/c.jpg", MIN_LEVEL, nat); // forces a's held bitmap down, tightening a's cap
+    expect(b.levelOf("a")).toBe(0); // a's held bitmap already sacrificed for c
+    resolve(bmp(1024, nat));
+    const gotA = await upgrade;
+    expect(gotA?.width).toBe(256); // re-clamped to a's new cap, not the stale 1024
+    expect(b.levelOf("a")).toBe(256);
+    expect((await cReq)?.width).toBe(MIN_LEVEL);
+    expect(b.bytes.value).toBeLessThanOrEqual(cap);
   });
 });
