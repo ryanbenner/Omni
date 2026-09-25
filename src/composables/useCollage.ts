@@ -126,6 +126,16 @@ export function useCollage() {
     touch();
   }
 
+  function relink(id: string, path: string, meta: { nw: number; nh: number; thumb?: string }) {
+    const it = find(id);
+    if (!it) return;
+    it.path = path;
+    it.nw = meta.nw;
+    it.nh = meta.nh;
+    it.thumb = meta.thumb;
+    touch();
+  }
+
   function toggleLock() {
     lockAspect.value = !lockAspect.value;
     touch();
@@ -160,6 +170,7 @@ export function useCollage() {
     setRect,
     rotate,
     reorder,
+    relink,
     toggleLock,
     setFormat,
     markClean,

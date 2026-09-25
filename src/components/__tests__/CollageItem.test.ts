@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, type Mock } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import CollageItem from "../CollageItem.vue";
 import type { CollageItem as Item } from "../../types";
@@ -92,5 +92,28 @@ describe("CollageItem", () => {
     expect(pic.style.width).toBe("400px");
     expect(pic.style.height).toBe("200px");
     expect(pic.style.transform).toBe("rotate(90deg)");
+  });
+
+  it("ignores a decode that resolves null after the item left the view", async () => {
+    let resolve!: (b: ImageBitmap | null) => void;
+    const budget = fakeBudget();
+    (budget.request as Mock).mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const w = mount(CollageItem, { props: { item, selected: false, zoom: 1, visible: true, budget, missing: false } });
+    await w.setProps({ visible: false });
+    resolve(null);
+    await flushPromises();
+    expect(w.emitted("missing")).toBeUndefined();
+  });
+
+  it("emits found when a missing item decodes again", async () => {
+    const budget = fakeBudget(null);
+    const w = mount(CollageItem, { props: { item, selected: false, zoom: 1, visible: true, budget, missing: false } });
+    await flushPromises();
+    expect(w.emitted("missing")).toEqual([["a"]]);
+    (budget.request as Mock).mockResolvedValue({ width: 512, height: 256, close() {} });
+    await w.setProps({ missing: true, visible: false });
+    await w.setProps({ visible: true });
+    await flushPromises();
+    expect(w.emitted("found")).toEqual([["a"]]);
   });
 });

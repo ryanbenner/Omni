@@ -48,12 +48,11 @@ function docWith(n: number): CollageDoc {
 }
 
 function mountWall(doc = docWith(2), path: string | null = "/p/w.collage") {
-  const w = mount(CollageWall, { props: { init: { doc, path } }, attachTo: document.body });
-  const stage = w.find(".wall").element as HTMLElement;
-  stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: VP.w, height: VP.h }) as DOMRect;
-  stage.setPointerCapture = () => {};
-  stage.releasePointerCapture = () => {};
-  return w;
+  // stubbed before mount so the wall measures a real viewport in onMounted
+  HTMLElement.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, width: VP.w, height: VP.h }) as DOMRect;
+  HTMLElement.prototype.setPointerCapture = () => {};
+  HTMLElement.prototype.releasePointerCapture = () => {};
+  return mount(CollageWall, { props: { init: { doc, path } }, attachTo: document.body });
 }
 
 async function ptr(w: ReturnType<typeof mount>, type: string, init: MouseEventInit & { target?: Element }) {
@@ -82,6 +81,7 @@ describe("CollageWall", () => {
     await flushPromises();
     expect(w.findAll("[data-item-id]")).toHaveLength(2);
     expect(w.findAll(".tab")).toHaveLength(2);
+    expect(w.findAllComponents({ name: "CollageItem" }).some((c) => c.props("visible"))).toBe(true);
     w.unmount();
   });
 
@@ -225,6 +225,27 @@ describe("CollageWall", () => {
     expect(writeCollageMock).toHaveBeenCalledWith("/p/w.collage", expect.objectContaining({ version: 1 }));
     expect(await p2).toBe(true);
     expect(w.emitted("status")?.slice(-1)[0]).toEqual(["w.collage"]);
+    w.unmount();
+  });
+
+  it("a second requestLeave while one is pending shares the same dialog and outcome", async () => {
+    const w = mountWall();
+    await flushPromises();
+    const vm = w.vm as unknown as {
+      requestLeave: (closing: boolean) => Promise<boolean>;
+      handleAction: (a: { type: string }) => boolean;
+    };
+    await ptr(w, "dblclick", { target: itemEl(w, "i0") });
+    vm.handleAction({ type: "rotate" });
+    await w.vm.$nextTick();
+    const p1 = vm.requestLeave(true);
+    const p2 = vm.requestLeave(false);
+    await w.vm.$nextTick();
+    expect(w.findAll(".dialog-cancel")).toHaveLength(1);
+    expect(w.find(".btn-outline").text()).toBe("Discard and Close");
+    await w.find(".dialog-cancel").trigger("click");
+    expect(await p1).toBe(false);
+    expect(await p2).toBe(false);
     w.unmount();
   });
 

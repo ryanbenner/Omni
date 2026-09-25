@@ -103,15 +103,19 @@ async function save(): Promise<boolean> {
 // ---- unsaved-changes gate ----
 
 const leave = ref<{ closing: boolean; resolve: (ok: boolean) => void } | null>(null);
+let pendingLeave: Promise<boolean> | null = null;
 
+// a second request while the dialog is up shares the first one's outcome
 function requestLeave(closing: boolean): Promise<boolean> {
   if (!collage.dirty.value) return Promise.resolve(true);
-  return new Promise((resolve) => (leave.value = { closing, resolve }));
+  pendingLeave ??= new Promise((resolve) => (leave.value = { closing, resolve }));
+  return pendingLeave;
 }
 
 function settleLeave(ok: boolean) {
   leave.value?.resolve(ok);
   leave.value = null;
+  pendingLeave = null;
 }
 
 async function leaveAfter(saver: () => Promise<boolean>) {
@@ -151,11 +155,15 @@ async function relink(id: string) {
     filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp"] }],
   });
   if (typeof picked !== "string") return;
-  const it = collage.items.value.find((i) => i.id === id);
-  if (!it) return;
-  it.path = picked;
+  let meta;
+  try {
+    meta = await loadImageMeta(picked);
+  } catch (e) {
+    flash(`Couldn't open ${fileName(picked)}: ${e}`);
+    return;
+  }
+  collage.relink(id, picked, { nw: meta.w, nh: meta.h, thumb: meta.thumb });
   missing.delete(id);
-  collage.dirty.value = true;
 }
 
 // ---- pointer routing ----
@@ -411,6 +419,7 @@ defineExpose({
           :budget="budget"
           :missing="missing.has(it.id)"
           @missing="missing.add($event)"
+          @found="missing.delete($event)"
           @relink="relink"
         />
       </div>

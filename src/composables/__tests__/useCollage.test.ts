@@ -91,4 +91,13 @@ describe("useCollage", () => {
     c.setFormat("jpg");
     expect(c.dirty.value).toBe(true);
   });
+
+  it("relink swaps path and natural size and thumb, and marks dirty", () => {
+    const c = useCollage();
+    const a = c.add(pic("a"), view);
+    c.markClean("/p/w.collage");
+    c.relink(a.id, "/q/a2.jpg", { nw: 800, nh: 600, thumb: "data:new" });
+    expect(c.items.value[0]).toMatchObject({ path: "/q/a2.jpg", nw: 800, nh: 600, thumb: "data:new", w: 400, h: 200 });
+    expect(c.dirty.value).toBe(true);
+  });
 });

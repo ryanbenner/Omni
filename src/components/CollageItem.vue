@@ -12,13 +12,14 @@ const props = defineProps<{
   budget: DecodeBudget;
   missing: boolean;
 }>();
-const emit = defineEmits<{ missing: [id: string]; relink: [id: string] }>();
+const emit = defineEmits<{ missing: [id: string]; found: [id: string]; relink: [id: string] }>();
 
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const HANDLE_PX = 10;
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const hasBitmap = ref(false);
+let seq = 0;
 const dpr = window.devicePixelRatio || 1;
 
 const swap = computed(() => props.item.rotation === 90 || props.item.rotation === 270);
@@ -75,6 +76,7 @@ function draw(bmp: ImageBitmap) {
 watch(
   [() => props.visible, required, () => props.item.path, () => props.budget.version.value],
   async ([vis, level, path]) => {
+    const run = ++seq;
     props.budget.setVisible(props.item.id, vis);
     if (!vis) {
       props.budget.release(props.item.id);
@@ -82,12 +84,15 @@ watch(
       return;
     }
     const bmp = await props.budget.request(props.item.id, path, level, { w: props.item.nw, h: props.item.nh });
+    // a newer run or a release (which resolves null) supersedes this one
+    if (run !== seq || !props.visible) return;
     if (!bmp) {
       hasBitmap.value = false;
       emit("missing", props.item.id);
       return;
     }
     draw(bmp);
+    if (props.missing) emit("found", props.item.id);
   },
   { immediate: true },
 );
