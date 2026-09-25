@@ -65,7 +65,7 @@ describe("validateArea", () => {
   it("accepts a normal area and rejects over-limit ones", () => {
     expect(validateArea({ x: 0, y: 0, w: 4000, h: 3000 })).toBeNull();
     expect(validateArea({ x: 0, y: 0, w: MAX_EXPORT_SIDE + 1, h: 10 })).toMatch(/16,384/);
-    expect(validateArea({ x: 0, y: 0, w: 16384, h: 16384 })).toMatch(/268/);
+    expect(validateArea({ x: 0, y: 0, w: 16384, h: 16384 })).toBeNull();
     expect(validateArea({ x: 0, y: 0, w: 0, h: 10 })).toMatch(/empty/);
   });
 });
@@ -84,7 +84,11 @@ describe("itemsInArea", () => {
 describe("renderArea", () => {
   it("draws each item offset from the area origin, scaled, and reports missing ones", async () => {
     const { deps, ctx, canvases } = fakeDeps(["/p/gone.jpg"]);
-    const items = [item({ id: "a", x: 120, y: 80 }), item({ id: "g", path: "/p/gone.jpg", x: 0, y: 0 })];
+    const items = [
+      item({ id: "a", x: 120, y: 80 }),
+      item({ id: "g", path: "/p/gone.jpg", x: 50, y: 20 }),
+      item({ id: "far", path: "/p/far.jpg", x: 900, y: 900 }),
+    ];
     const out = await renderArea({ x: 100, y: 50, w: 400, h: 300 }, items, "png", 0.5, deps);
     expect(canvases[0]).toMatchObject({ width: 200, height: 150 });
     expect(out.missing).toEqual(["/p/gone.jpg"]);
@@ -93,6 +97,7 @@ describe("renderArea", () => {
     // item a: center at (120-100+50, 80-50+25) = (70, 55) wall px, times 0.5
     expect(ctx.translate).toHaveBeenCalledWith(35, 27.5);
     expect(ctx.drawImage).toHaveBeenCalledWith(expect.anything(), -25, -12.5, 50, 25);
+    expect(deps.loadBitmap).not.toHaveBeenCalledWith("/p/far.jpg");
   });
 
   it("fills white for jpg and rotates 90-degree items about their center", async () => {

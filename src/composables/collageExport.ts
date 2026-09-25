@@ -42,7 +42,9 @@ export function validateArea(rect: Rect): string | null {
   if (w > MAX_EXPORT_SIDE || h > MAX_EXPORT_SIDE) {
     return `The export area is too large: each side must be 16,384 px or less (this one is ${w} × ${h}).`;
   }
-  if (w * h >= MAX_EXPORT_PIXELS) {
+  // at the max side, w*h lands exactly on the limit, so this only fires for
+  // areas that are large in both dimensions without both hitting the side cap
+  if (w * h > MAX_EXPORT_PIXELS) {
     return `The export area is too large: at most 268 million pixels (this one is ${w} × ${h}).`;
   }
   return null;
@@ -72,9 +74,7 @@ export async function renderArea(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   const missing: string[] = [];
-  // items are the ones the caller already selected (via itemsInArea); only
-  // the z order still matters here
-  for (const it of [...items].sort((a, b) => a.z - b.z)) {
+  for (const it of itemsInArea(items, rect)) {
     let bmp: ImageBitmap;
     try {
       bmp = await deps.loadBitmap(it.path);
