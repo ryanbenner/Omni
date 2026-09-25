@@ -183,6 +183,42 @@ describe("useDecodeBudget", () => {
     expect((decoded as unknown as { close: () => void }).close).toHaveBeenCalled();
   });
 
+  it("release during a pending decode, then a same-level request, still resolves with a real bitmap", async () => {
+    const { promise, resolve } = deferredBitmap();
+    const slow = vi.fn(() => promise);
+    const b = useDecodeBudget(slow);
+    b.setVisible("a", true);
+    const first = b.request("a", "/a.jpg", 512, nat);
+    b.release("a");
+    const second = b.request("a", "/a.jpg", 512, nat); // must not coalesce onto the cancelled decode
+    const decoded = bmp(512, nat);
+    resolve(decoded);
+    expect(await first).toBeNull(); // the cancelled decode still resolves null
+    const got = await second;
+    expect(got?.width).toBe(512);
+    expect(b.levelOf("a")).toBe(512);
+    expect(b.bytes.value).toBe(bytesAt(512, nat));
+    expect(b.loaded.value).toBe(1);
+  });
+
+  it("forget during a pending decode, then a same-level request, still resolves with a real bitmap", async () => {
+    const { promise, resolve } = deferredBitmap();
+    const slow = vi.fn(() => promise);
+    const b = useDecodeBudget(slow);
+    b.setVisible("a", true);
+    const first = b.request("a", "/a.jpg", 512, nat);
+    b.forget("a");
+    const second = b.request("a", "/a.jpg", 512, nat);
+    const decoded = bmp(512, nat);
+    resolve(decoded);
+    expect(await first).toBeNull();
+    const got = await second;
+    expect(got?.width).toBe(512);
+    expect(b.levelOf("a")).toBe(512);
+    expect(b.bytes.value).toBe(bytesAt(512, nat));
+    expect(b.loaded.value).toBe(1);
+  });
+
   it("steps a non-power-of-two natural-size request down through powers of two, not fractional levels", async () => {
     const cap = bytesAt(MIN_LEVEL, nat) + 10;
     const b = useDecodeBudget(decoder, cap);

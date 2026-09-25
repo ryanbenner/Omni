@@ -228,6 +228,10 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
     unreserve(e);
     drop(e);
     e.maxLevel = 0;
+    // don't leave a cancelled decode coalescable: a same-level re-request must
+    // start fresh, not adopt the now-stale pending promise
+    e.pendingPromise = null;
+    e.pendingLevel = null;
   }
 
   function setVisible(id: string, visible: boolean) {
@@ -243,6 +247,9 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
     unreserve(e);
     drop(e);
     entries.delete(id);
+    // tidiness: the entry is discarded, but leave no coalescable pending state on it
+    e.pendingPromise = null;
+    e.pendingLevel = null;
   }
 
   function levelOf(id: string): number {
