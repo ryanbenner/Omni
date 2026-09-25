@@ -9,6 +9,8 @@ const JPG_QUALITY = 0.92;
 
 export interface Ctx2D {
   fillStyle: string;
+  imageSmoothingEnabled: boolean;
+  imageSmoothingQuality: ImageSmoothingQuality;
   fillRect(x: number, y: number, w: number, h: number): void;
   save(): void;
   restore(): void;
@@ -69,6 +71,9 @@ export async function renderArea(
   );
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("no canvas context");
+  // chromium defaults to "low", which aliases badly when downscaling
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   if (format === "jpg") {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);

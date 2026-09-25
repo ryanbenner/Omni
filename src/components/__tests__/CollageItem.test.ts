@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, type Mock } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { ref } from "vue";
 import CollageItem from "../CollageItem.vue";
 import type { CollageItem as Item } from "../../types";
 import type { DecodeBudget } from "../../composables/useDecodeBudget";
@@ -115,5 +116,48 @@ describe("CollageItem", () => {
     await w.setProps({ visible: true });
     await flushPromises();
     expect(w.emitted("found")).toEqual([["a"]]);
+  });
+
+  it("frees the canvas backing store when the decode is released and on unmount", async () => {
+    const budget = fakeBudget();
+    const w = mount(CollageItem, { props: { item, selected: false, zoom: 1, visible: true, budget, missing: false } });
+    await flushPromises();
+    const c = w.find("canvas").element as HTMLCanvasElement;
+    expect([c.width, c.height]).toEqual([512, 256]);
+    await w.setProps({ visible: false });
+    expect([c.width, c.height]).toEqual([0, 0]);
+    await w.setProps({ visible: true });
+    await flushPromises();
+    expect([c.width, c.height]).toEqual([512, 256]);
+    w.unmount();
+    expect([c.width, c.height]).toEqual([0, 0]);
+  });
+
+  it("does not repaint when a version bump hands back the bitmap it already drew", async () => {
+    const budget = fakeBudget();
+    const version = ref(0);
+    (budget as unknown as { version: typeof version }).version = version;
+    const getContext = HTMLCanvasElement.prototype.getContext as Mock;
+    const w = mount(CollageItem, { props: { item, selected: false, zoom: 1, visible: true, budget, missing: false } });
+    await flushPromises();
+    const calls = getContext.mock.calls.length;
+    version.value++;
+    await flushPromises();
+    expect(budget.request).toHaveBeenCalledTimes(2);
+    expect(getContext.mock.calls.length).toBe(calls);
+    w.unmount();
+  });
+
+  it("a request replaced by a newer level resolves null without raising missing", async () => {
+    let resolveFirst!: (b: ImageBitmap | null) => void;
+    const budget = fakeBudget();
+    (budget.request as Mock).mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+    const w = mount(CollageItem, { props: { item, selected: false, zoom: 1, visible: true, budget, missing: false } });
+    await w.setProps({ zoom: 2 });
+    resolveFirst(null); // the budget voids a replaced request
+    await flushPromises();
+    expect(w.emitted("missing")).toBeUndefined();
+    const c = w.find("canvas").element as HTMLCanvasElement;
+    expect([c.width, c.height]).toEqual([512, 256]);
   });
 });

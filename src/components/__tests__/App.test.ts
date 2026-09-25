@@ -46,7 +46,7 @@ const wallSpies = { addPaths: vi.fn(), requestLeave: vi.fn(), dirty: false, last
 const WallStub = defineComponent({
   name: "CollageWall",
   props: ["init"],
-  emits: ["exit", "status"],
+  emits: ["exit", "status", "selected", "reveal"],
   setup(_, { expose }) {
     expose({
       addPaths: wallSpies.addPaths,
@@ -289,6 +289,60 @@ describe("App collage routing", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
     await flushPromises();
     expect(w.find(".wall-stub").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("a bad collage opened over a dirty wall reports without asking to leave and keeps the wall", async () => {
+    const w = await mountApp();
+    app(w).enterCollage(["/p/a.jpg"]);
+    await flushPromises();
+    wallSpies.dirty = true;
+    readCollageMock.mockRejectedValue(new Error("unsupported collage version 9"));
+    await app(w).openFile("/p/w.collage");
+    await flushPromises();
+    expect(wallSpies.requestLeave).not.toHaveBeenCalled();
+    expect(w.find(".wall-stub").exists()).toBe(true);
+    expect(w.findComponent(WallStub).props("init").seedPaths).toEqual(["/p/a.jpg"]);
+    expect(message).toHaveBeenCalledWith(expect.stringContaining("unsupported collage version 9"), {
+      title: "Couldn't open collage",
+      kind: "error",
+    });
+    w.unmount();
+  });
+
+  it("a good collage opened over the wall reads first, then gates; a refusal keeps the current wall", async () => {
+    const w = await mountApp();
+    app(w).enterCollage(["/p/a.jpg"]);
+    await flushPromises();
+    wallSpies.requestLeave.mockResolvedValue(false);
+    await app(w).openFile("/p/w.collage");
+    await flushPromises();
+    expect(readCollageMock).toHaveBeenCalledWith("/p/w.collage");
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(false);
+    expect(w.findComponent(WallStub).props("init").seedPaths).toEqual(["/p/a.jpg"]);
+    wallSpies.requestLeave.mockResolvedValue(true);
+    await app(w).openFile("/p/w.collage");
+    await flushPromises();
+    expect(w.findComponent(WallStub).props("init").path).toBe("/p/w.collage");
+    w.unmount();
+  });
+
+  it("on the wall, the sidebar highlights the selected item and re-reveals on request", async () => {
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    app(w).enterCollage(["/p/a.jpg"]);
+    await flushPromises();
+    expect(w.findComponent(Sidebar).props("currentPath")).toBeNull();
+    w.findComponent(WallStub).vm.$emit("selected", "/p/b.png");
+    await flushPromises();
+    expect(w.findComponent(Sidebar).props("currentPath")).toBe("/p/b.png");
+    w.findComponent(WallStub).vm.$emit("reveal", "/p/c.png");
+    await flushPromises();
+    expect(w.findComponent(Sidebar).props("currentPath")).toBe("/p/c.png");
+    w.findComponent(WallStub).vm.$emit("selected", null);
+    await flushPromises();
+    expect(w.findComponent(Sidebar).props("currentPath")).toBeNull();
     w.unmount();
   });
 });

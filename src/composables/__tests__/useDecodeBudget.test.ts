@@ -30,9 +30,9 @@ describe("levelFor and bytesAt", () => {
     expect(levelFor(9000, 4000)).toBe(4000);
   });
 
-  it("bytesAt is width times height times four at that level", () => {
-    expect(bytesAt(512, nat)).toBe(512 * 256 * 4);
-    expect(bytesAt(4000, nat)).toBe(4000 * 2000 * 4);
+  it("bytesAt is width times height times four, twice over (bitmap plus canvas copy)", () => {
+    expect(bytesAt(512, nat)).toBe(512 * 256 * 4 * 2);
+    expect(bytesAt(4000, nat)).toBe(4000 * 2000 * 4 * 2);
   });
 
   it("the cap is 6 GB", () => {
@@ -272,5 +272,64 @@ describe("useDecodeBudget", () => {
     expect(b.levelOf("a")).toBe(256);
     expect((await cReq)?.width).toBe(MIN_LEVEL);
     expect(b.bytes.value).toBeLessThanOrEqual(cap);
+  });
+
+  it("counts a committed decode at both copies it costs", async () => {
+    const b = useDecodeBudget(decoder);
+    b.setVisible("a", true);
+    await b.request("a", "/a.jpg", 512, nat);
+    expect(b.bytes.value).toBe(512 * 256 * 4 * 2);
+  });
+
+  it("zooming through levels while a decode is in flight decodes only the latest level after it settles", async () => {
+    const { promise, resolve } = deferredBitmap();
+    const calls: number[] = [];
+    const dec = vi.fn((_p: string, level: number, natural: { w: number; h: number }) => {
+      calls.push(level);
+      return calls.length === 1 ? promise : Promise.resolve(bmp(level, natural));
+    });
+    const b = useDecodeBudget(dec);
+    b.setVisible("a", true);
+    const first = b.request("a", "/a.jpg", 256, nat);
+    const r512 = b.request("a", "/a.jpg", 512, nat);
+    const r1024 = b.request("a", "/a.jpg", 1024, nat);
+    const r2048 = b.request("a", "/a.jpg", 2048, nat);
+    resolve(bmp(256, nat));
+    expect((await first)?.width).toBe(256);
+    expect(await r512).toBeNull();
+    expect(await r1024).toBeNull();
+    expect((await r2048)?.width).toBe(2048);
+    expect(calls).toEqual([256, 2048]);
+    expect(b.levelOf("a")).toBe(2048);
+  });
+
+  it("runs at most four decoders at once and queues the rest", async () => {
+    let running = 0;
+    let peak = 0;
+    const waiting: (() => void)[] = [];
+    const dec = vi.fn((_p: string, level: number, natural: { w: number; h: number }) => {
+      running++;
+      peak = Math.max(peak, running);
+      return new Promise<ImageBitmap>((res) =>
+        waiting.push(() => {
+          running--;
+          res(bmp(level, natural));
+        }),
+      );
+    });
+    const b = useDecodeBudget(dec);
+    const ids = Array.from({ length: 10 }, (_, i) => "i" + i);
+    for (const id of ids) b.setVisible(id, true);
+    const all = Promise.all(ids.map((id) => b.request(id, "/" + id + ".jpg", 256, nat)));
+    await Promise.resolve();
+    expect(dec).toHaveBeenCalledTimes(4);
+    while (dec.mock.calls.length < 10 || waiting.length) {
+      waiting.shift()?.();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const got = await all;
+    expect(got.every((g) => g?.width === 256)).toBe(true);
+    expect(dec).toHaveBeenCalledTimes(10);
+    expect(peak).toBe(4);
   });
 });

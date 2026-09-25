@@ -45,8 +45,10 @@ export function useMediaList() {
       return; // folder unreadable right now: keep the list as it was
     }
     if (watched?.dir !== dir) return; // user moved on during the read
-    const found = listing.files.findIndex((it) => it.path === curPath);
-    items.value = listing.files;
+    // read_dir_entries lists collages for the sidebar; they are not viewer media
+    const files = listing.files.filter((it) => it.kind !== "collage");
+    const found = files.findIndex((it) => it.path === curPath);
+    items.value = files;
     currentIndex.value =
       found >= 0 ? found : Math.max(0, Math.min(currentIndex.value, items.value.length - 1));
   }

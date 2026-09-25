@@ -271,4 +271,79 @@ describe("CollageWall", () => {
     expect(w.find(".mem-readout").exists()).toBe(true);
     w.unmount();
   });
+
+  it("Escape during an export drag cancels it: release opens no preview", async () => {
+    const w = mountWall();
+    await flushPromises();
+    const vm = w.vm as unknown as { handleAction: (a: { type: string }) => boolean };
+    vm.handleAction({ type: "exportArea" });
+    await w.vm.$nextTick();
+    await ptr(w, "pointerdown", { button: 0, clientX: 100, clientY: 100 });
+    await ptr(w, "pointermove", { clientX: 500, clientY: 400 });
+    expect(w.find(".area").exists()).toBe(true);
+    vm.handleAction({ type: "deselect" });
+    await w.vm.$nextTick();
+    expect(w.find(".area").exists()).toBe(false);
+    expect(w.find(".wall").classes()).not.toContain("arming");
+    await ptr(w, "pointerup", { clientX: 500, clientY: 400 });
+    await flushPromises();
+    expect(w.findComponent({ name: "ExportPreview" }).exists()).toBe(false);
+    expect(w.find(".area").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("right-click on an item selects it and shows Rotate, Remove from wall, Reveal in sidebar", async () => {
+    const w = mountWall();
+    await flushPromises();
+    await ptr(w, "contextmenu", { button: 2, clientX: 200, clientY: 150, target: itemEl(w, "i0") });
+    expect(itemEl(w, "i0").classList.contains("selected")).toBe(true);
+    expect(w.findAll(".context-menu .menu-item").map((b) => b.text())).toEqual([
+      "Rotate",
+      "Remove from wall",
+      "Reveal in sidebar",
+    ]);
+    await w.findAll(".context-menu .menu-item")[0].trigger("click");
+    expect(w.find(".context-menu").exists()).toBe(false);
+    expect((w.find("[data-item-id='i0'] .pic").element as HTMLElement).style.transform).toBe("rotate(90deg)");
+    w.unmount();
+  });
+
+  it("the item menu removes an item and reveals its path; a pointerdown elsewhere closes it", async () => {
+    const w = mountWall();
+    await flushPromises();
+    await ptr(w, "contextmenu", { button: 2, clientX: 500, clientY: 150, target: itemEl(w, "i1") });
+    await w.findAll(".context-menu .menu-item")[2].trigger("click");
+    expect(w.emitted("reveal")).toEqual([["/p/1.jpg"]]);
+    await ptr(w, "contextmenu", { button: 2, clientX: 500, clientY: 150, target: itemEl(w, "i1") });
+    await ptr(w, "pointerdown", { button: 0, clientX: 900, clientY: 700 });
+    await ptr(w, "pointerup", { clientX: 900, clientY: 700 });
+    expect(w.find(".context-menu").exists()).toBe(false);
+    await ptr(w, "contextmenu", { button: 2, clientX: 500, clientY: 150, target: itemEl(w, "i1") });
+    await w.findAll(".context-menu .menu-item")[1].trigger("click");
+    expect(w.findAll("[data-item-id]")).toHaveLength(1);
+    expect(w.find(".context-menu").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("right-click on empty wall shows no menu and suppresses the native one", async () => {
+    const w = mountWall();
+    await flushPromises();
+    const ev = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 900, clientY: 700 });
+    w.find(".wall").element.dispatchEvent(ev);
+    await w.vm.$nextTick();
+    expect(ev.defaultPrevented).toBe(true);
+    expect(w.find(".context-menu").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("emits the selected item's path whenever the selection changes", async () => {
+    const w = mountWall();
+    await flushPromises();
+    await ptr(w, "dblclick", { target: itemEl(w, "i1") });
+    expect(w.emitted("selected")?.slice(-1)[0]).toEqual(["/p/1.jpg"]);
+    (w.vm as unknown as { handleAction: (a: { type: string }) => boolean }).handleAction({ type: "deselect" });
+    await w.vm.$nextTick();
+    expect(w.emitted("selected")?.slice(-1)[0]).toEqual([null]);
+    w.unmount();
+  });
 });

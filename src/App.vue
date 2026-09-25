@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { listen } from "@tauri-apps/api/event";
@@ -40,6 +40,9 @@ const collageStatus = ref("");
 const collageError = ref<string | null>(null);
 const LAST_COLLAGE_KEY = "mv-last-collage";
 const resumePath = ref<string | null>(null);
+// the sidebar highlights the wall's selected item while the wall is open
+const wallSelected = ref<string | null>(null);
+watch(collageInit, () => (wallSelected.value = null));
 
 const currentFolder = computed(() =>
   list.current.value ? parentDir(list.current.value.path) : null,
@@ -78,19 +81,28 @@ function enterCollage(seedPaths: string[]) {
   collageInit.value = { doc: emptyDoc(), path: null, seedPaths };
 }
 
+// read first so a bad file never costs the current stage, dirty or not
 async function openCollage(path: string) {
-  if (wall.value && !(await wall.value.requestLeave(false))) return;
+  let doc: CollageDoc;
   try {
-    const doc = await readCollage(path);
-    collageError.value = null;
-    collageInit.value = { doc, path };
+    doc = await readCollage(path);
   } catch (e) {
-    collageInit.value = null;
     const text = `Couldn't open ${path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1)}: ${e instanceof Error ? e.message : e}`;
     // the inline error only shows on the empty screen
-    if (list.current.value) await message(text, { title: "Couldn't open collage", kind: "error" });
+    if (collageOpen.value || list.current.value) await message(text, { title: "Couldn't open collage", kind: "error" });
     else collageError.value = text;
+    return;
   }
+  if (wall.value && !(await wall.value.requestLeave(false))) return;
+  collageError.value = null;
+  collageInit.value = { doc, path };
+}
+
+// null first so the sidebar re-reveals even when the path is unchanged
+async function revealInSidebar(path: string) {
+  wallSelected.value = null;
+  await nextTick();
+  wallSelected.value = path;
 }
 
 // a wall that has not mounted yet has nothing to lose
@@ -229,7 +241,7 @@ defineExpose({ openFile, enterCollage });
       <Sidebar
         v-if="sidebarOpen"
         ref="sidebar"
-        :current-path="collageOpen ? null : (list.current.value?.path ?? null)"
+        :current-path="collageOpen ? wallSelected : (list.current.value?.path ?? null)"
         :current-folder="currentFolder"
         @open-file="openFile"
         @add-to-collage="onAddToCollage"
@@ -243,6 +255,8 @@ defineExpose({ openFile, enterCollage });
           :init="collageInit"
           @exit="onWallExit"
           @status="collageStatus = $event"
+          @selected="wallSelected = $event"
+          @reveal="revealInSidebar"
         />
         <Viewer
           v-else-if="list.current.value"

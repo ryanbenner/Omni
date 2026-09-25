@@ -185,6 +185,19 @@ describe("useMediaList live updates", () => {
     expect(watchers.has("/g")).toBe(true);
   });
 
+  it("resync leaves .collage files out of the next/prev list", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    const wall = { path: "/f/wall.collage", kind: "collage", name: "wall.collage", mtime: 250, size: 0 };
+    wire([newer, wall, ...scanResult.items]);
+    await list.resync();
+    expect(list.items.value.map((i) => i.name)).toEqual(["newer.mp4", "new.mp4", "mid.jpg", "old.png"]);
+    expect(list.current.value?.name).toBe("mid.jpg");
+    list.prev();
+    list.prev();
+    expect(list.current.value?.name).toBe("newer.mp4");
+  });
+
   it("resync re-reads the current folder", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");

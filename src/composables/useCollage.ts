@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, toRaw } from "vue";
 import type { CollageDoc, CollageItem, ExportFormat, Rect } from "../types";
 import { emptyDoc } from "./collageFile";
 import { findEmptySpot, initialSize } from "./collageGeometry";
@@ -49,7 +49,7 @@ export function useCollage() {
     view: { center: { x: number; y: number }; visible: Rect },
   ): CollageItem {
     const size = initialSize(pic.nw, pic.nh, view.visible);
-    const spot = findEmptySpot(size, view.center, items.value);
+    const spot = findEmptySpot(size, view.center, toRaw(items.value));
     const z = items.value.reduce((m, i) => Math.max(m, i.z), 0) + 1;
     const item: CollageItem = {
       id: newId(),

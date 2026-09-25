@@ -22,6 +22,14 @@ describe("useCollage", () => {
     expect(b.x !== a.x || b.y !== a.y).toBe(true);
   });
 
+  it("placing 150 items stays fast (placement reads plain objects, not proxies)", () => {
+    const c = useCollage();
+    const start = performance.now();
+    for (let i = 0; i < 150; i++) c.add(pic("p" + i), view);
+    expect(c.items.value).toHaveLength(150);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
   it("select, bringToFront, remove", () => {
     const c = useCollage();
     const a = c.add(pic("a"), view);

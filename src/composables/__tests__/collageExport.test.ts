@@ -37,6 +37,8 @@ function item(over: Partial<CollageItem>): CollageItem {
 function fakeDeps(missingPaths: string[] = []) {
   const ctx = {
     fillStyle: "",
+    imageSmoothingEnabled: false,
+    imageSmoothingQuality: "low" as ImageSmoothingQuality,
     fillRect: vi.fn(),
     save: vi.fn(),
     restore: vi.fn(),
@@ -109,6 +111,13 @@ describe("renderArea", () => {
     expect(ctx.rotate).toHaveBeenCalledWith(Math.PI / 2);
     // footprint is 50x100 rotated, so the bitmap draws as 100x50 centered
     expect(ctx.drawImage).toHaveBeenCalledWith(expect.anything(), -50, -25, 100, 50);
+  });
+
+  it("downscales with high-quality smoothing", async () => {
+    const { deps, ctx } = fakeDeps();
+    await renderArea({ x: 0, y: 0, w: 100, h: 100 }, [item({})], "png", 0.5, deps);
+    expect(ctx.imageSmoothingEnabled).toBe(true);
+    expect(ctx.imageSmoothingQuality).toBe("high");
   });
 
   it("closes every bitmap it decodes", async () => {

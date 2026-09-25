@@ -3,6 +3,9 @@ import { ref, type Ref } from "vue";
 // future settings page: Collage section, "wall memory cap"
 export const WALL_MEMORY_CAP_BYTES = 6 * 1024 ** 3;
 export const MIN_LEVEL = 64;
+// the budget's bitmap plus the item's canvas copy
+const HELD_COPIES = 2;
+const MAX_CONCURRENT_DECODES = 4;
 
 export function levelFor(requiredLongSide: number, naturalLongSide: number): number {
   let level = MIN_LEVEL;
@@ -12,7 +15,7 @@ export function levelFor(requiredLongSide: number, naturalLongSide: number): num
 
 export function bytesAt(level: number, natural: { w: number; h: number }): number {
   const s = level / Math.max(natural.w, natural.h);
-  return Math.round(natural.w * s) * Math.round(natural.h * s) * 4;
+  return Math.round(natural.w * s) * Math.round(natural.h * s) * 4 * HELD_COPIES;
 }
 
 // largest power of two strictly below `level`, floored at MIN_LEVEL; a natural-size
@@ -43,6 +46,7 @@ interface Entry {
   generation: number; // bumped by release/forget to void a decode already in flight
   pendingLevel: number | null;
   pendingPromise: Promise<ImageBitmap | null> | null;
+  wantedLevel: number; // latest level asked for; requests queued behind a pending decode for any other level resolve null
 }
 
 export interface DecodeBudget {
@@ -63,6 +67,21 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
   const entries = new Map<string, Entry>();
   let tick = 0;
   let reservedTotal = 0; // bytes claimed by decodes in flight, not yet committed
+  let running = 0;
+  const queued: (() => void)[] = [];
+
+  // fifo slots; a finished decode hands its slot straight to the next in line
+  async function limited<T>(fn: () => Promise<T>): Promise<T> {
+    if (running < MAX_CONCURRENT_DECODES) running++;
+    else await new Promise<void>((r) => queued.push(r));
+    try {
+      return await fn();
+    } finally {
+      const next = queued.shift();
+      if (next) next();
+      else running--;
+    }
+  }
 
   function entry(id: string, path: string, natural: { w: number; h: number }): Entry {
     let e = entries.get(id);
@@ -80,6 +99,7 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
         generation: 0,
         pendingLevel: null,
         pendingPromise: null,
+        wantedLevel: 0,
       };
       entries.set(id, e);
     }
@@ -164,7 +184,10 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
       reserve(e, l);
       let bmp: ImageBitmap;
       try {
-        bmp = await decode(path, l, natural);
+        // a decode released while it waited for a slot is not worth running
+        bmp = await limited(() =>
+          e.generation === gen ? decode(path, l, natural) : Promise.reject(new Error("released")),
+        );
       } catch {
         unreserve(e);
         if (e.generation === gen && entries.get(id) === e) drop(e);
@@ -184,7 +207,7 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
       drop(e);
       e.bitmap = bmp;
       e.level = l;
-      e.bytes = bmp.width * bmp.height * 4;
+      e.bytes = bmp.width * bmp.height * 4 * HELD_COPIES;
       bytes.value += e.bytes;
       loaded.value++;
       return bmp;
@@ -211,11 +234,15 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
     // the first request; always refresh to the real natural size here
     e.path = path;
     e.natural = natural;
+    e.wantedLevel = level;
     if (e.bitmap && e.level === level) return e.bitmap;
     if (e.pendingPromise) {
       if (e.pendingLevel === level) return e.pendingPromise;
-      // a different level is wanted: let the in-flight decode settle, then retry
+      // a different level is wanted: let the in-flight decode settle, then run
+      // only the latest wanted level; anything replaced meanwhile resolves null
+      const gen = e.generation;
       await e.pendingPromise;
+      if (e.wantedLevel !== level || e.generation !== gen) return null;
       return request(id, path, level, natural);
     }
     return startDecode(e, id, path, level, natural);

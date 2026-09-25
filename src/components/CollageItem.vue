@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onUnmounted, ref, watch } from "vue";
 import type { CollageItem } from "../types";
 import { levelFor, type DecodeBudget } from "../composables/useDecodeBudget";
 import type { Handle } from "../composables/collageGeometry";
@@ -19,6 +19,7 @@ const HANDLE_PX = 10;
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const hasBitmap = ref(false);
+let drawn: ImageBitmap | null = null;
 let seq = 0;
 const dpr = window.devicePixelRatio || 1;
 
@@ -65,10 +66,26 @@ const required = computed(() =>
 function draw(bmp: ImageBitmap) {
   const c = canvas.value;
   if (!c) return;
+  if (bmp === drawn && hasBitmap.value) return;
+  if (c.width !== bmp.width || c.height !== bmp.height) free();
   c.width = bmp.width;
   c.height = bmp.height;
   c.getContext("2d")?.drawImage(bmp, 0, 0, bmp.width, bmp.height);
+  drawn = bmp;
   hasBitmap.value = true;
+}
+
+// a hidden canvas keeps its full-size backing store; shrink it so the
+// budget's count stays close to real memory
+function free() {
+  const c = canvas.value;
+  if (c) c.width = c.height = 0;
+  drawn = null;
+}
+
+function clear() {
+  free();
+  hasBitmap.value = false;
 }
 
 // budget.version bumps when the budget dropped a visible decode to make
@@ -80,14 +97,15 @@ watch(
     props.budget.setVisible(props.item.id, vis);
     if (!vis) {
       props.budget.release(props.item.id);
-      hasBitmap.value = false;
+      clear();
       return;
     }
     const bmp = await props.budget.request(props.item.id, path, level, { w: props.item.nw, h: props.item.nh });
     // a newer run or a release (which resolves null) supersedes this one
-    if (run !== seq || !props.visible) return;
+    if (run !== seq) return;
+    if (!props.visible) return clear();
     if (!bmp) {
-      hasBitmap.value = false;
+      clear();
       emit("missing", props.item.id);
       return;
     }
@@ -97,6 +115,7 @@ watch(
   { immediate: true },
 );
 
+onBeforeUnmount(free);
 onUnmounted(() => props.budget.forget(props.item.id));
 </script>
 

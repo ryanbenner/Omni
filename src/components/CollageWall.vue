@@ -16,7 +16,12 @@ import ExportPreview from "./ExportPreview.vue";
 import UnsavedDialog from "./UnsavedDialog.vue";
 
 const props = defineProps<{ init: { doc: CollageDoc; path: string | null; seedPaths?: string[] } }>();
-const emit = defineEmits<{ exit: [lastPath: string | null]; status: [text: string] }>();
+const emit = defineEmits<{
+  exit: [lastPath: string | null];
+  status: [text: string];
+  selected: [path: string | null];
+  reveal: [path: string];
+}>();
 
 const LAST_COLLAGE_KEY = "mv-last-collage";
 const CLICK_SLOP = 4;
@@ -49,6 +54,8 @@ function emitStatus() {
   emit("status", collage.dirty.value ? `${name} •` : name);
 }
 watch([collage.filePath, collage.dirty], emitStatus);
+// the sidebar's current-file highlight follows the selected item
+watch(collage.selectedId, () => emit("selected", collage.selected.value?.path ?? null));
 
 function applyInit() {
   collage.load(props.init.doc, props.init.path);
@@ -174,6 +181,7 @@ type Drag =
   | { mode: "resize"; id: string; handle: Handle; start: Rect }
   | { mode: "area"; origin: { x: number; y: number } };
 let drag: Drag | null = null;
+let dragPointer = 0;
 const arming = ref(false);
 const area = ref<Rect | null>(null);
 const preview = ref<Rect | null>(null);
@@ -188,6 +196,11 @@ function itemIdAt(target: EventTarget | null): string | null {
 }
 
 function onPointerDown(e: PointerEvent) {
+  if (menu.value) {
+    // any click outside the menu closes it without starting a drag
+    menu.value = null;
+    return;
+  }
   if (e.button !== 0) return;
   const s = local(e);
   const wall = view.toWall(s.x, s.y);
@@ -206,6 +219,7 @@ function onPointerDown(e: PointerEvent) {
       drag = { mode: "pan", lastX: s.x, lastY: s.y, moved: false, onEmpty: !id };
     }
   }
+  dragPointer = e.pointerId;
   stage.value?.setPointerCapture(e.pointerId);
 }
 
@@ -266,6 +280,40 @@ function onPointerUp(e: PointerEvent) {
   }
 }
 
+function cancelArea() {
+  if (drag?.mode === "area") stage.value?.releasePointerCapture?.(dragPointer);
+  drag = null;
+  area.value = null;
+  arming.value = false;
+}
+
+// ---- item menu ----
+
+const menu = ref<{ x: number; y: number; id: string } | null>(null);
+
+function onContextMenu(e: MouseEvent) {
+  const id = itemIdAt(e.target);
+  if (!id) return;
+  collage.select(id);
+  menu.value = { x: e.clientX, y: e.clientY, id };
+}
+
+function menuRotate() {
+  if (menu.value) collage.rotate(menu.value.id);
+  menu.value = null;
+}
+
+function menuRemove() {
+  if (menu.value) removeItem(menu.value.id);
+  menu.value = null;
+}
+
+function menuReveal() {
+  const it = menu.value && collage.items.value.find((i) => i.id === menu.value!.id);
+  if (it) emit("reveal", it.path);
+  menu.value = null;
+}
+
 function onDblClick(e: MouseEvent) {
   const id = itemIdAt(e.target);
   if (!id) return;
@@ -307,7 +355,7 @@ function handleAction(action: ViewerAction): boolean {
       if (collage.selectedId.value) removeItem(collage.selectedId.value);
       return true;
     case "deselect":
-      if (arming.value) arming.value = false;
+      if (arming.value || drag?.mode === "area") cancelArea();
       else collage.select(null);
       return true;
     case "fitAll":
@@ -334,6 +382,7 @@ function handleAction(action: ViewerAction): boolean {
 }
 
 function removeItem(id: string) {
+  if (menu.value?.id === id) menu.value = null;
   collage.remove(id);
   budget.forget(id);
   missing.delete(id);
@@ -407,6 +456,7 @@ defineExpose({
       @pointercancel="onPointerUp"
       @dblclick="onDblClick"
       @wheel="onWheel"
+      @contextmenu.prevent="onContextMenu"
     >
       <div class="plane" :style="view.style.value">
         <CollageItem
@@ -427,7 +477,7 @@ defineExpose({
         <span class="area-size">{{ Math.round(area.w) }} × {{ Math.round(area.h) }}</span>
       </div>
 
-      <div class="pill" @pointerdown.stop @dblclick.stop>
+      <div class="pill" @pointerdown.stop="menu = null" @dblclick.stop>
         <button
           class="pill-btn lock"
           :class="{ on: collage.lockAspect.value }"
@@ -470,6 +520,18 @@ defineExpose({
         </button>
       </div>
       <div v-if="flashMsg" class="save-msg">{{ flashMsg }}</div>
+      <div
+        v-if="menu"
+        class="context-menu"
+        :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
+        @pointerdown.stop
+        @dblclick.stop
+      >
+        <button class="menu-item" @click="menuRotate">Rotate</button>
+        <button class="menu-item" @click="menuRemove">Remove from wall</button>
+        <div class="menu-sep" />
+        <button class="menu-item" @click="menuReveal">Reveal in sidebar</button>
+      </div>
 
       <ExportPreview
         v-if="preview"
@@ -584,6 +646,35 @@ defineExpose({
   height: 18px;
   margin: 0 5px;
   background: var(--color-neutral-900);
+}
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  border-radius: 4px;
+  padding: 2px;
+  box-shadow: 0 4px 12px #0008;
+  cursor: default;
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  padding: 0.35rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.menu-item:hover {
+  background: var(--color-accent-900);
+}
+.menu-sep {
+  height: 1px;
+  margin: 2px 6px;
+  background: var(--color-neutral-800);
 }
 .mem-readout {
   font-size: 11px;
