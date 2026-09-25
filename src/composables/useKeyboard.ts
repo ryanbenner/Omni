@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted } from "vue";
 import { resolveKey, resolveKeyUp, type Command } from "./keymap";
-import type { MediaKind } from "../types";
+import type { StageKind } from "../types";
 
 // shortcuts must not fire while the user types in a text field
 function isTyping(e: KeyboardEvent): boolean {
@@ -14,7 +14,7 @@ function isTyping(e: KeyboardEvent): boolean {
 }
 
 export function useKeyboard(
-  kind: () => MediaKind | null,
+  kind: () => StageKind | null,
   handler: (cmd: Command) => void,
 ) {
   function onKeydown(e: KeyboardEvent) {

@@ -133,3 +133,39 @@ describe("resolveKey", () => {
     expect(resolveKey(k("Escape"), "image")).toBeNull();
   });
 });
+
+describe("collage keys", () => {
+  const c = (key: string, mods: Partial<{ shiftKey: boolean; ctrlKey: boolean }> = {}) => ({
+    key,
+    shiftKey: false,
+    ...mods,
+  });
+  const viewer = (type: string) => ({ target: "viewer", action: { type } });
+
+  it("maps the wall's single keys", () => {
+    expect(resolveKey(c("l"), "collage")).toEqual(viewer("toggleLock"));
+    expect(resolveKey(c("r"), "collage")).toEqual(viewer("rotate"));
+    expect(resolveKey(c("Delete"), "collage")).toEqual(viewer("removeSelected"));
+    expect(resolveKey(c("Backspace"), "collage")).toEqual(viewer("removeSelected"));
+    expect(resolveKey(c("Escape"), "collage")).toEqual(viewer("deselect"));
+    expect(resolveKey(c("f"), "collage")).toEqual(viewer("fitAll"));
+    expect(resolveKey(c("0"), "collage")).toEqual(viewer("resetZoom"));
+    expect(resolveKey(c("e"), "collage")).toEqual(viewer("exportArea"));
+    expect(resolveKey(c("m"), "collage")).toEqual(viewer("toggleMemory"));
+    expect(resolveKey(c("c"), "collage")).toEqual(viewer("exitCollage"));
+  });
+
+  it("maps ctrl+s and ctrl+shift+s to save and save as", () => {
+    expect(resolveKey(c("s", { ctrlKey: true }), "collage")).toEqual(viewer("save"));
+    expect(resolveKey(c("S", { ctrlKey: true, shiftKey: true }), "collage")).toEqual(viewer("saveAs"));
+    expect(resolveKey(c("s"), "collage")).toBeNull();
+  });
+
+  it("does not navigate files on the wall and does not leak into other kinds", () => {
+    expect(resolveKey(c("PageDown"), "collage")).toBeNull();
+    expect(resolveKey(c("ArrowRight"), "collage")).toBeNull();
+    expect(resolveKey(c("e"), "image")).toBeNull();
+    expect(resolveKey(c("l"), "video")).toBeNull();
+    expect(resolveKeyUp(c("<"), "collage")).toBeNull();
+  });
+});

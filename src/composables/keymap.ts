@@ -1,19 +1,49 @@
-import type { AppAction, MediaKind, ViewerAction } from "../types";
+import type { AppAction, StageKind, ViewerAction } from "../types";
 
 export type Command =
   | { target: "app"; action: AppAction }
   | { target: "viewer"; action: ViewerAction; fallback?: AppAction };
 
-type KeyInput = { key: string; shiftKey: boolean };
+type KeyInput = { key: string; shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean };
 
 export function resolveKey(
   e: KeyInput,
-  kind: MediaKind | null,
+  kind: StageKind | null,
 ): Command | null {
   if (kind === null) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
-  // both kinds
+  if (kind === "collage") {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && key === "s") {
+      return { target: "viewer", action: { type: e.shiftKey ? "saveAs" : "save" } };
+    }
+    if (ctrl) return null;
+    switch (key) {
+      case "l":
+        return { target: "viewer", action: { type: "toggleLock" } };
+      case "r":
+        return { target: "viewer", action: { type: "rotate" } };
+      case "Delete":
+      case "Backspace":
+        return { target: "viewer", action: { type: "removeSelected" } };
+      case "Escape":
+        return { target: "viewer", action: { type: "deselect" } };
+      case "f":
+        return { target: "viewer", action: { type: "fitAll" } };
+      case "0":
+        return { target: "viewer", action: { type: "resetZoom" } };
+      case "e":
+        return { target: "viewer", action: { type: "exportArea" } };
+      case "m":
+        return { target: "viewer", action: { type: "toggleMemory" } };
+      case "c":
+        return { target: "viewer", action: { type: "exitCollage" } };
+    }
+    return null;
+  }
+
+  // both remaining kinds
   if (key === "PageUp") return { target: "app", action: { type: "prevFile" } };
   if (key === "PageDown") return { target: "app", action: { type: "nextFile" } };
 
@@ -75,7 +105,7 @@ export function resolveKey(
 // keyup matters only for hold-to-shuttle: releasing < or > ends the shuttle
 export function resolveKeyUp(
   e: KeyInput,
-  kind: MediaKind | null,
+  kind: StageKind | null,
 ): Command | null {
   if (kind !== "video") return null;
   switch (e.key) {

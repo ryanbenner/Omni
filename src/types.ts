@@ -28,7 +28,19 @@ export type ViewerAction =
   | { type: "fit" }
   | { type: "setIn" }
   | { type: "setOut" }
-  | { type: "exitTrim" };
+  | { type: "exitTrim" }
+  // collage wall
+  | { type: "toggleLock" }
+  | { type: "removeSelected" }
+  | { type: "deselect" }
+  | { type: "fitAll" }
+  | { type: "exportArea" }
+  | { type: "save" }
+  | { type: "saveAs" }
+  | { type: "toggleMemory" }
+  | { type: "exitCollage" };
+
+export type StageKind = "video" | "image" | "collage";
 
 export type AppAction = { type: "prevFile" } | { type: "nextFile" };
 
