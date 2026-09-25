@@ -8,7 +8,7 @@ import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composabl
 import { parentDir, sepOf } from "../composables/pathUtils";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
-const emit = defineEmits<{ navigate: [dir: -1 | 1] }>();
+const emit = defineEmits<{ navigate: [dir: -1 | 1]; collage: [] }>();
 
 function navClick(dir: -1 | 1, e: MouseEvent) {
   emit("navigate", dir);
@@ -144,6 +144,9 @@ function handleAction(action: ViewerAction): boolean {
       // baseline css already fits the window, so both reset the transform
       t.reset();
       return true;
+    case "enterCollage":
+      emit("collage");
+      return true;
     default:
       return false;
   }
@@ -213,6 +216,10 @@ defineExpose({ handleAction });
       </button>
       <button class="pill-btn" data-tip="Fullscreen" @click="toggleFullscreen">
         <i class="ph ph-corners-out" />
+      </button>
+      <span class="pill-div" />
+      <button class="pill-btn" data-tip="Collage mode (C)" @click="emit('collage')">
+        <i class="ph ph-images" />
       </button>
     </div>
     <div

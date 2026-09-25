@@ -38,7 +38,8 @@ export type ViewerAction =
   | { type: "save" }
   | { type: "saveAs" }
   | { type: "toggleMemory" }
-  | { type: "exitCollage" };
+  | { type: "exitCollage" }
+  | { type: "enterCollage" };
 
 export type StageKind = "video" | "image" | "collage";
 

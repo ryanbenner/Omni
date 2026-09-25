@@ -168,4 +168,9 @@ describe("collage keys", () => {
     expect(resolveKey(c("l"), "video")).toBeNull();
     expect(resolveKeyUp(c("<"), "collage")).toBeNull();
   });
+
+  it("c on an image enters collage mode", () => {
+    expect(resolveKey(c("c"), "image")).toEqual(viewer("enterCollage"));
+    expect(resolveKey(c("c"), "video")).toBeNull();
+  });
 });

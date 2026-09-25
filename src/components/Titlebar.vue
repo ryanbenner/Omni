@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-defineProps<{ sidebarOpen: boolean }>();
+defineProps<{ sidebarOpen: boolean; subtitle?: string }>();
 defineEmits<{ toggleSidebar: [] }>();
 
 const win = getCurrentWindow();
@@ -19,6 +19,7 @@ const win = getCurrentWindow();
     <div class="tb-brand" data-tauri-drag-region>
       <span class="tb-logo-prism" data-tauri-drag-region />
       <span class="tb-name" data-tauri-drag-region>Omni</span>
+      <span v-if="subtitle" class="tb-sub" data-tauri-drag-region>· {{ subtitle }}</span>
     </div>
     <div class="tb-spacer" data-tauri-drag-region />
     <div class="tb-controls">
@@ -111,5 +112,11 @@ const win = getCurrentWindow();
 .tb-close:hover {
   background: #7a2b3a;
   color: var(--color-neutral-100);
+}
+.tb-sub {
+  margin-left: 6px;
+  color: var(--color-neutral-500);
+  font-size: 12px;
+  white-space: nowrap;
 }
 </style>

@@ -5,7 +5,7 @@ import VideoPlayer from "./VideoPlayer.vue";
 import ImageViewer from "./ImageViewer.vue";
 
 defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
-defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
+defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1]; collage: [] }>();
 
 const child = ref<{ handleAction: (a: ViewerAction) => boolean } | null>(null);
 
@@ -34,5 +34,6 @@ defineExpose({ handleAction });
     :has-prev="hasPrev"
     :has-next="hasNext"
     @navigate="$emit('navigate', $event)"
+    @collage="$emit('collage')"
   />
 </template>

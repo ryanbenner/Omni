@@ -24,4 +24,15 @@ describe("ImageViewer pill", () => {
     expect(tips).toContain("Fit to window (F)");
     expect(w.findAll(".pill-btn[title]")).toHaveLength(0);
   });
+
+  it("has a collage mode button and emits collage on click and on the key action", async () => {
+    const w = mount(ImageViewer, { props: { item } });
+    const btn = w.find(".pill-btn[data-tip='Collage mode (C)']");
+    expect(btn.exists()).toBe(true);
+    await btn.trigger("click");
+    expect(w.emitted("collage")).toHaveLength(1);
+    const vm = w.vm as unknown as { handleAction: (a: { type: string }) => boolean };
+    expect(vm.handleAction({ type: "enterCollage" })).toBe(true);
+    expect(w.emitted("collage")).toHaveLength(2);
+  });
 });

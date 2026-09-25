@@ -159,3 +159,42 @@ describe("Sidebar focus resync", () => {
     expect(readsOfZ()).toBe(0);
   });
 });
+
+describe("Sidebar collage entry", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
+      if (cmd === "read_dir_entries")
+        return Promise.resolve({
+          folders: [],
+          files: [
+            { path: "C:\\a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 },
+            { path: "C:\\b.heic", kind: "image", name: "b.heic", mtime: 1, size: 0 },
+            { path: "C:\\v.mp4", kind: "video", name: "v.mp4", mtime: 0, size: 0 },
+          ],
+        });
+      return Promise.reject(`unexpected ${cmd}`);
+    });
+  });
+
+  it("offers Collage for encodable images only and emits addToCollage", async () => {
+    const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null }, attachTo: document.body });
+    await flushPromises();
+    await w.find(".tree-row").trigger("click"); // expand C:
+    await flushPromises();
+    const rows = w.findAll(".tree-row");
+    await rows[1].trigger("contextmenu", { clientX: 5, clientY: 5 }); // a.jpg
+    const entry = w.findAll(".menu-item").find((m) => m.text() === "Collage");
+    expect(entry).toBeDefined();
+    await entry!.trigger("click");
+    expect(w.emitted("addToCollage")).toEqual([["C:\\a.jpg"]]);
+    await rows[2].trigger("contextmenu", { clientX: 5, clientY: 5 }); // b.heic
+    expect(w.findAll(".menu-item").some((m) => m.text() === "Collage")).toBe(false);
+    await rows[3].trigger("contextmenu", { clientX: 5, clientY: 5 }); // v.mp4
+    expect(w.findAll(".menu-item").some((m) => m.text() === "Collage")).toBe(false);
+    w.unmount();
+  });
+});

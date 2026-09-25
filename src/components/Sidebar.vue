@@ -5,6 +5,7 @@ import { ask, message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
 import { parentDir } from "../composables/pathUtils";
+import { extOf } from "../composables/useImageSave";
 import { filePreview, videoThumbnail } from "../composables/dragPreview";
 import type { MediaKind, Pin } from "../types";
 
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   openFile: [path: string];
   fileDeleted: [path: string];
   fileRenamed: [oldPath: string, newPath: string, newName: string];
+  addToCollage: [path: string];
 }>();
 
 const tree = useFileTree((p) => emit("openFile", p));
@@ -44,6 +46,19 @@ const menu = ref<{
 } | null>(null);
 
 function closeMenu() {
+  menu.value = null;
+}
+
+// the wall decodes through the browser, which cannot read heic on windows
+const COLLAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
+function canCollage(name: string): boolean {
+  return COLLAGE_EXTS.includes(extOf(name));
+}
+
+function collageFromMenu() {
+  const m = menu.value;
+  if (!m) return;
+  emit("addToCollage", m.path);
   menu.value = null;
 }
 
@@ -415,6 +430,10 @@ async function deleteFromMenu() {
         </button>
       </template>
       <template v-else>
+        <button v-if="canCollage(menu.name)" class="menu-item" @click="collageFromMenu">
+          <i class="ph ph-images" />
+          Collage
+        </button>
         <button class="menu-item" @click="copyToClipboard">
           <i class="ph ph-copy" />
           Copy to clipboard

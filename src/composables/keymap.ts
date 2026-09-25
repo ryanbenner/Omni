@@ -59,6 +59,8 @@ export function resolveKey(
         return { target: "viewer", action: { type: "resetZoom" } };
       case "r":
         return { target: "viewer", action: { type: "rotate" } };
+      case "c":
+        return { target: "viewer", action: { type: "enterCollage" } };
     }
     return null;
   }
