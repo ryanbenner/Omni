@@ -4,6 +4,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { CollageItem, ExportFormat, Rect } from "../types";
 import { browserDeps, exportArea, renderArea, type RenderDeps } from "../composables/collageExport";
 import { nextFreeCompositionPath } from "../composables/collageFile";
+import { onEscape } from "../composables/dialogStack";
 
 const props = defineProps<{
   rect: Rect;
@@ -74,19 +75,14 @@ async function saveAs() {
   await writeTo(dest);
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape") {
-    e.stopPropagation();
-    emit("close");
-  }
-}
+let offEscape: (() => void) | null = null;
 
 onMounted(() => {
-  window.addEventListener("keydown", onKey, true);
+  offEscape = onEscape(() => emit("close"));
   render();
 });
 onUnmounted(() => {
-  window.removeEventListener("keydown", onKey, true);
+  offEscape?.();
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
 });
 watch(() => props.format, (f) => (format.value = f));

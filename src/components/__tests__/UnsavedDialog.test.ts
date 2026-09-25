@@ -32,4 +32,14 @@ describe("UnsavedDialog", () => {
     expect(document.activeElement?.textContent).toBe("Save");
     w.unmount();
   });
+
+  it("with two dialogs stacked, one Escape only cancels the top one", () => {
+    const bottom = mount(UnsavedDialog, { attachTo: document.body });
+    const top = mount(UnsavedDialog, { attachTo: document.body });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(top.emitted("cancel")).toHaveLength(1);
+    expect(bottom.emitted("cancel")).toBeUndefined();
+    top.unmount();
+    bottom.unmount();
+  });
 });

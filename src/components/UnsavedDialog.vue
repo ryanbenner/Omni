@@ -1,23 +1,18 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { onEscape } from "../composables/dialogStack";
 
 defineProps<{ closing?: boolean }>();
 const emit = defineEmits<{ discard: []; save: []; saveAs: []; cancel: [] }>();
 
 const saveBtn = ref<HTMLButtonElement | null>(null);
-
-function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape") {
-    e.stopPropagation();
-    emit("cancel");
-  }
-}
+let offEscape: (() => void) | null = null;
 
 onMounted(() => {
-  window.addEventListener("keydown", onKey, true);
+  offEscape = onEscape(() => emit("cancel"));
   saveBtn.value?.focus();
 });
-onUnmounted(() => window.removeEventListener("keydown", onKey, true));
+onUnmounted(() => offEscape?.());
 </script>
 
 <template>
