@@ -292,6 +292,17 @@ describe("CollageWall", () => {
     w.unmount();
   });
 
+  it("right-click on the tab strip suppresses the native menu and opens no item menu", async () => {
+    const w = mountWall();
+    await flushPromises();
+    const e = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 10 });
+    w.find(".tabs").element.dispatchEvent(e);
+    await w.vm.$nextTick();
+    expect(e.defaultPrevented).toBe(true);
+    expect(w.find(".context-menu").exists()).toBe(false);
+    w.unmount();
+  });
+
   it("right-click on an item selects it and shows Rotate, Remove from wall, Reveal in sidebar", async () => {
     const w = mountWall();
     await flushPromises();

@@ -437,7 +437,8 @@ defineExpose({
 </script>
 
 <template>
-  <div class="collage">
+  <!-- covers the tab strip too: webview2's native menu has reload, which would drop an unsaved wall -->
+  <div class="collage" @contextmenu.prevent="onContextMenu">
     <CollageTabs
       :items="collage.items.value"
       :selected-id="collage.selectedId.value"
@@ -456,7 +457,6 @@ defineExpose({
       @pointercancel="onPointerUp"
       @dblclick="onDblClick"
       @wheel="onWheel"
-      @contextmenu.prevent="onContextMenu"
     >
       <div class="plane" :style="view.style.value">
         <CollageItem
