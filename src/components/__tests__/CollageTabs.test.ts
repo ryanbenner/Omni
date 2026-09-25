@@ -60,8 +60,8 @@ describe("CollageTabs", () => {
     const w = mountTabs();
     const tabs = w.findAll(".tab");
     await fire(tabs[0].element, "pointerdown", { button: 0, clientX: 30 });
-    await fire(window, "pointermove", { clientX: 290 }); // past the middle of tab c: slot 3
-    await fire(window, "pointerup", { clientX: 290 });
+    await fire(window, "pointermove", { clientX: 320 }); // past the middle of tab c (300): slot 3
+    await fire(window, "pointerup", { clientX: 320 });
     expect(w.emitted("reorder")).toEqual([[0, 3]]);
     expect(w.emitted("select")).toBeUndefined(); // a drag is not a click
     w.unmount();
