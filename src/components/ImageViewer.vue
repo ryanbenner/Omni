@@ -197,21 +197,21 @@ defineExpose({ handleAction });
       <i class="ph ph-caret-right" />
     </button>
     <div v-if="!failed" class="pill" @pointerdown.stop="menu = null">
-      <button class="pill-btn" title="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
+      <button class="pill-btn" data-tip="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
         <i class="ph ph-magnifying-glass-minus" />
       </button>
       <span class="pill-pct">{{ zoomPct }}</span>
-      <button class="pill-btn" title="Zoom in" @click="t.zoomBy(ZOOM_STEP)">
+      <button class="pill-btn" data-tip="Zoom in" @click="t.zoomBy(ZOOM_STEP)">
         <i class="ph ph-magnifying-glass-plus" />
       </button>
       <span class="pill-div" />
-      <button class="pill-btn" title="Fit to window (F)" @click="t.reset()">
+      <button class="pill-btn" data-tip="Fit to window (F)" @click="t.reset()">
         <i class="ph ph-frame-corners" />
       </button>
-      <button class="pill-btn" title="Rotate (R)" @click="t.rotate()">
+      <button class="pill-btn" data-tip="Rotate (R)" @click="t.rotate()">
         <i class="ph ph-arrow-clockwise" />
       </button>
-      <button class="pill-btn" title="Fullscreen" @click="toggleFullscreen">
+      <button class="pill-btn" data-tip="Fullscreen" @click="toggleFullscreen">
         <i class="ph ph-corners-out" />
       </button>
     </div>

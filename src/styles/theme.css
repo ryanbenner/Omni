@@ -65,3 +65,24 @@ input[type="range"] {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* instant hover label; the native title waits a second before showing */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  color: var(--color-neutral-200);
+  font-size: 11px;
+  font-family: var(--font-body);
+  pointer-events: none;
+  z-index: 30;
+}
