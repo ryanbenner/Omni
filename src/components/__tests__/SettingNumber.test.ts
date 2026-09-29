@@ -62,4 +62,14 @@ describe("SettingNumber", () => {
     await w.setProps({ modelValue: 12 });
     expect((w.find("input").element as HTMLInputElement).value).toBe("12");
   });
+
+  it("commits a typed draft when it unmounts, so escape keeps the value", async () => {
+    const w = mountNumber();
+    const input = w.find("input");
+    (input.element as HTMLInputElement).value = "75";
+    await input.trigger("input");
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+    w.unmount();
+    expect(last(w)).toBe(75);
+  });
 });

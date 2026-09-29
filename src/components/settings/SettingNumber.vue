@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { RANGES, type RangeKey } from "../../composables/settings";
 
 const props = defineProps<{ range: RangeKey; unit: string }>();
@@ -24,6 +24,8 @@ function commit() {
   model.value = v;
   draft.value = String(v);
 }
+// escape closes the modal without a blur; keep what was typed
+onBeforeUnmount(commit);
 </script>
 
 <template>
