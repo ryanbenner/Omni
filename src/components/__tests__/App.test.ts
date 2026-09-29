@@ -8,7 +8,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => `asset://${p}`,
 }));
 vi.mock("@tauri-apps/plugin-cli", () => ({ getMatches: vi.fn(() => Promise.reject("no cli")) }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
+const singleInstanceHandlers: ((e: { payload: string[] }) => void)[] = [];
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn((name: string, h: (e: { payload: string[] }) => void) => {
+    if (name === "single-instance") singleInstanceHandlers.push(h);
+    return Promise.resolve(() => {});
+  }),
+}));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(), message: vi.fn(), save: vi.fn(), open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 const closeHandlers: ((e: { preventDefault: () => void }) => Promise<void>)[] = [];
@@ -92,6 +98,7 @@ beforeEach(() => {
   wallSpies.requestLeave.mockReset().mockResolvedValue(true);
   wallSpies.dirty = false;
   closeHandlers.length = 0;
+  singleInstanceHandlers.length = 0;
   destroyMock.mockReset();
   vi.mocked(message).mockReset();
   localStorage.clear();
@@ -350,6 +357,17 @@ describe("App collage routing", () => {
 });
 
 describe("App settings", () => {
+  it("a file handed over by a second instance closes settings and shows the file", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    expect(w.find(".settings").exists()).toBe(true);
+    singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg" });
+    w.unmount();
+  });
+
   it("the gear opens the modal over an inert sidebar and stage, and closes it again", async () => {
     const w = await mountApp();
     expect(w.find(".settings").exists()).toBe(false);

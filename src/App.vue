@@ -201,7 +201,10 @@ onMounted(async () => {
   });
   await listen<string[]>("single-instance", (e) => {
     const path = pathFromArgv(e.payload);
-    if (path) openFile(path);
+    if (path) {
+      settingsOpen.value = false;
+      openFile(path);
+    }
   });
   try {
     const matches = await getMatches();
