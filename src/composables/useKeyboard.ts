@@ -16,9 +16,11 @@ function isTyping(e: KeyboardEvent): boolean {
 export function useKeyboard(
   kind: () => StageKind | null,
   handler: (cmd: Command) => void,
+  // gates keydown only: keyup must still run so a held shuttle key releases
+  enabled: () => boolean = () => true,
 ) {
   function onKeydown(e: KeyboardEvent) {
-    if (isTyping(e)) return;
+    if (!enabled() || isTyping(e)) return;
     const cmd = resolveKey(e, kind());
     if (cmd) {
       e.preventDefault();
