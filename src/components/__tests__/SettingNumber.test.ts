@@ -30,11 +30,13 @@ describe("SettingNumber", () => {
 
   it("rounds a decimal to an integer on blur", async () => {
     const w = mountNumber();
-    await w.find("input").setValue("2.5");
+    const input = w.find("input");
+    (input.element as HTMLInputElement).value = "2.5";
+    await input.trigger("input");
     expect(w.emitted("update:modelValue")).toBeUndefined();
-    await w.find("input").trigger("blur");
+    await input.trigger("blur");
     expect(last(w)).toBe(3);
-    expect((w.find("input").element as HTMLInputElement).value).toBe("3");
+    expect((input.element as HTMLInputElement).value).toBe("3");
   });
 
   it("clamps into the range", async () => {

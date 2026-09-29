@@ -28,6 +28,7 @@ function commit() {
 
 <template>
   <span class="number-field">
+    <!-- v-model not used on type=number input since vue would cast draft to number, breaking string handling -->
     <input
       :value="draft"
       @input="handleInput"
