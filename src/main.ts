@@ -6,5 +6,7 @@ import "@phosphor-icons/web/fill";
 import "./styles/theme.css";
 import { createApp } from "vue";
 import App from "./App.vue";
+import { loadSettings } from "./composables/settings";
 
+loadSettings();
 createApp(App).mount("#app");
