@@ -12,8 +12,17 @@ import { settings, loadSettings } from "../../composables/settings";
 
 const item: MediaItem = { path: "/f/a.mp4", kind: "video", name: "a.mp4", mtime: 1, size: 0 };
 
+const mounted: ReturnType<typeof mount>[] = [];
+
+// leaked players answer store watchers
+afterEach(() => {
+  mounted.forEach((w) => w.unmount());
+  mounted.length = 0;
+});
+
 function mountPlayer(paused: boolean) {
   const w = mount(VideoPlayer, { props: { item } });
+  mounted.push(w);
   const el = w.find("video").element as HTMLVideoElement;
   // jsdom media elements never play: fake the state the feature keys off
   Object.defineProperty(el, "paused", { value: paused, configurable: true });
@@ -87,7 +96,7 @@ describe("VideoPlayer hold to speed up", () => {
   });
 });
 
-describe("VideoPlayer default speed", () => {
+describe("VideoPlayer settings", () => {
   beforeEach(() => {
     localStorage.clear();
     loadSettings();
@@ -112,5 +121,23 @@ describe("VideoPlayer default speed", () => {
     Object.defineProperty(el, "duration", { value: 30, configurable: true });
     await w.find("button[title='Trim clip']").trigger("click");
     expect(w.find(".cap").text()).toContain("25 MB");
+  });
+
+  it("with persistent volume on, seeds from the store and mirrors both ways", async () => {
+    settings.video.persistentVolume = true;
+    settings.video.volume = 0.4;
+    settings.video.muted = true;
+    const { w, el } = mountPlayer(false);
+    el.dispatchEvent(new Event("loadedmetadata"));
+    expect(el.volume).toBe(0.4);
+    expect(el.muted).toBe(true);
+    await w.find(".volume").setValue("0.7");
+    await w.vm.$nextTick();
+    expect(settings.video.volume).toBe(0.7);
+    settings.video.volume = 0.2;
+    settings.video.muted = false;
+    await w.vm.$nextTick();
+    expect(el.volume).toBe(0.2);
+    expect(el.muted).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ import {
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { usePersistentVolume } from "../composables/usePersistentVolume";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
 const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
@@ -214,6 +215,14 @@ const currentTime = ref(0);
 const duration = ref(0);
 const volume = ref(1);
 const muted = ref(false);
+usePersistentVolume(volume, muted);
+// the store can move these while the settings slider is dragged
+watch([volume, muted], ([v, m]) => {
+  const el = video.value;
+  if (!el) return;
+  el.volume = v;
+  el.muted = m;
+});
 const failed = ref(false);
 const speed = ref(settings.video.defaultSpeed);
 
