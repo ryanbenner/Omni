@@ -8,7 +8,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => `asset://${p}`,
 }));
 vi.mock("@tauri-apps/plugin-cli", () => ({ getMatches: vi.fn(() => Promise.reject("no cli")) }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
+const singleInstanceHandlers: ((e: { payload: string[] }) => void)[] = [];
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn((name: string, h: (e: { payload: string[] }) => void) => {
+    if (name === "single-instance") singleInstanceHandlers.push(h);
+    return Promise.resolve(() => {});
+  }),
+}));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(), message: vi.fn(), save: vi.fn(), open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 const closeHandlers: ((e: { preventDefault: () => void }) => Promise<void>)[] = [];
@@ -65,39 +71,42 @@ import App from "../../App.vue";
 import Sidebar from "../Sidebar.vue";
 import { message } from "@tauri-apps/plugin-dialog";
 import { emptyDoc } from "../../composables/collageFile";
+import { settings, loadSettings } from "../../composables/settings";
 
 const scan = (path: string) => ({
   items: [{ path, kind: path.endsWith(".mp4") ? "video" : "image", name: path.slice(3), mtime: 1, size: 0 }],
   startIndex: 0,
 });
 
-describe("App collage routing", () => {
-  beforeEach(() => {
-    invokeMock.mockReset().mockImplementation((cmd: string, args?: { path?: string }) => {
-      if (cmd === "scan_media") return Promise.resolve(scan(args!.path!));
-      if (cmd === "list_drives") return Promise.resolve([]);
-      if (cmd === "read_dir_entries") return Promise.resolve({ folders: [], files: [] });
-      return Promise.reject(`unexpected ${cmd}`);
-    });
-    readCollageMock.mockReset().mockResolvedValue(emptyDoc());
-    wallSpies.addPaths.mockReset();
-    wallSpies.requestLeave.mockReset().mockResolvedValue(true);
-    wallSpies.dirty = false;
-    closeHandlers.length = 0;
-    destroyMock.mockReset();
-    vi.mocked(message).mockReset();
-    localStorage.clear();
-    document.body.innerHTML = "";
+async function mountApp() {
+  const w = mount(App, { attachTo: document.body });
+  await flushPromises();
+  return w;
+}
+const app = (w: ReturnType<typeof mount>) =>
+  w.vm as unknown as { openFile: (p: string) => Promise<void>; enterCollage: (seed: string[]) => void };
+
+beforeEach(() => {
+  invokeMock.mockReset().mockImplementation((cmd: string, args?: { path?: string }) => {
+    if (cmd === "scan_media") return Promise.resolve(scan(args!.path!));
+    if (cmd === "list_drives") return Promise.resolve([]);
+    if (cmd === "read_dir_entries") return Promise.resolve({ folders: [], files: [] });
+    return Promise.reject(`unexpected ${cmd}`);
   });
+  readCollageMock.mockReset().mockResolvedValue(emptyDoc());
+  wallSpies.addPaths.mockReset();
+  wallSpies.requestLeave.mockReset().mockResolvedValue(true);
+  wallSpies.dirty = false;
+  closeHandlers.length = 0;
+  singleInstanceHandlers.length = 0;
+  destroyMock.mockReset();
+  vi.mocked(message).mockReset();
+  localStorage.clear();
+  loadSettings();
+  document.body.innerHTML = "";
+});
 
-  async function mountApp() {
-    const w = mount(App, { attachTo: document.body });
-    await flushPromises();
-    return w;
-  }
-  const app = (w: ReturnType<typeof mount>) =>
-    w.vm as unknown as { openFile: (p: string) => Promise<void>; enterCollage: (seed: string[]) => void };
-
+describe("App collage routing", () => {
   it("opening a .collage path shows the wall instead of the viewer", async () => {
     const w = await mountApp();
     await app(w).openFile("/p/w.collage");
@@ -343,6 +352,90 @@ describe("App collage routing", () => {
     w.findComponent(WallStub).vm.$emit("selected", null);
     await flushPromises();
     expect(w.findComponent(Sidebar).props("currentPath")).toBeNull();
+    w.unmount();
+  });
+});
+
+describe("App settings", () => {
+  it("a file handed over by a second instance closes settings and shows the file", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    expect(w.find(".settings").exists()).toBe(true);
+    singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg" });
+    w.unmount();
+  });
+
+  it("the gear opens the modal over an inert sidebar and stage, and closes it again", async () => {
+    const w = await mountApp();
+    expect(w.find(".settings").exists()).toBe(false);
+    await w.find(".tb-gear").trigger("click");
+    expect(w.find(".settings").exists()).toBe(true);
+    expect(w.find(".tb-gear").classes()).toContain("active");
+    expect(w.find(".sidebar").attributes("inert")).toBeDefined();
+    expect(w.find(".stage").attributes("inert")).toBeDefined();
+    await w.find(".tb-gear").trigger("click");
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(w.find(".sidebar").attributes("inert")).toBeUndefined();
+    expect(w.find(".stage").attributes("inert")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("the modal's close and Escape both close it", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.find(".settings-close").trigger("click");
+    expect(w.find(".settings").exists()).toBe(false);
+    await w.find(".tb-gear").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("viewer shortcuts are ignored while settings are open", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    await w.find(".tb-gear").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
+    await flushPromises();
+    expect(wallSpies.requestLeave).not.toHaveBeenCalled();
+    expect(w.find(".wall-stub").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("a window close with a dirty wall closes settings before asking", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    wallSpies.dirty = true;
+    await w.find(".tb-gear").trigger("click");
+    wallSpies.requestLeave.mockResolvedValue(false);
+    await closeHandlers[0]({ preventDefault: vi.fn() });
+    await flushPromises();
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(true);
+    expect(w.find(".settings").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("starts with the file tree hidden when the setting says so", async () => {
+    localStorage.setItem("mv-settings", JSON.stringify({ general: { sidebarAtLaunch: false } }));
+    loadSettings();
+    const w = await mountApp();
+    expect(w.find(".sidebar").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("hides the resume offer live when the setting is off", async () => {
+    localStorage.setItem("mv-last-collage", "/p/weekend.collage");
+    const w = await mountApp();
+    expect(w.find(".resume-btn").exists()).toBe(true);
+    settings.general.offerResume = false;
+    await flushPromises();
+    expect(w.find(".resume-btn").exists()).toBe(false);
     w.unmount();
   });
 });

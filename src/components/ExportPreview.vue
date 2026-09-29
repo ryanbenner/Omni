@@ -5,6 +5,7 @@ import type { CollageItem, ExportFormat, Rect } from "../types";
 import { browserDeps, exportArea, renderArea, type RenderDeps } from "../composables/collageExport";
 import { nextFreeCompositionPath } from "../composables/collageFile";
 import { onEscape } from "../composables/dialogStack";
+import { settings } from "../composables/settings";
 
 const props = defineProps<{
   rect: Rect;
@@ -53,7 +54,7 @@ function setFormat(f: ExportFormat) {
 async function writeTo(dest: string) {
   busy.value = true;
   try {
-    await exportArea(props.rect, props.items, format.value, dest, deps());
+    await exportArea(props.rect, props.items, format.value, settings.collage.jpgQuality / 100, dest, deps());
     emit("saved", dest);
   } catch (e) {
     error.value = "Save failed: " + e;

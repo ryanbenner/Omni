@@ -7,7 +7,7 @@ import TrimBar from "./TrimBar.vue";
 import ExportPanel from "./ExportPanel.vue";
 import { useTrim } from "../composables/useTrim";
 import {
-  CAP_BYTES,
+  clipCapBytes,
   ensureMp4,
   estimateClipBytes,
   formatMB,
@@ -16,6 +16,8 @@ import {
   type ExportRequest,
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
+import { settings } from "../composables/settings";
+import { usePersistentVolume } from "../composables/usePersistentVolume";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
 const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
@@ -88,8 +90,9 @@ const sizeLabel = computed(() => {
   if (!trim.active.value) return "";
   const est = estimateClipBytes(props.item.size, trim.duration.value, trim.keptDuration.value);
   if (est <= 0) return "";
-  if (capped.value && est > CAP_BYTES) {
-    return `~${formatMB(CAP_BYTES)} (capped from ≈${formatMB(est)})`;
+  const cap = clipCapBytes();
+  if (capped.value && est > cap) {
+    return `~${formatMB(cap)} (capped from ≈${formatMB(est)})`;
   }
   if (capped.value) return `≈${formatMB(est)} · under the cap`;
   return `≈${formatMB(est)}`;
@@ -130,7 +133,7 @@ async function onExport(
   const dir = parentDir(srcPath);
   const sep = sepOf(srcPath);
   const stem = srcName.replace(/\.[^.]+$/, "");
-  const target = mode === "discord" ? CAP_BYTES : undefined;
+  const target = mode === "discord" ? clipCapBytes() : undefined;
   try {
     if (!replace) {
       const output = dir + sep + chosenName;
@@ -212,8 +215,16 @@ const currentTime = ref(0);
 const duration = ref(0);
 const volume = ref(1);
 const muted = ref(false);
+usePersistentVolume(volume, muted);
+// the store can move these while the settings slider is dragged
+watch([volume, muted], ([v, m]) => {
+  const el = video.value;
+  if (!el) return;
+  el.volume = v;
+  el.muted = m;
+});
 const failed = ref(false);
-const speed = ref(1);
+const speed = ref(settings.video.defaultSpeed);
 
 const FRAME = 1 / 60;
 const EDGE = 0.05;
@@ -222,7 +233,7 @@ const SHUTTLE_RATE = 0.1;
 // hold-to-shuttle: > plays at 10% speed, < steps backwards at 10% speed
 // (video elements cannot play in reverse, so rev is a seek loop)
 const shuttle = ref<"fwd" | "rev" | null>(null);
-let priorRate = 1;
+let priorRate = settings.video.defaultSpeed;
 let priorPaused = false;
 let revRaf = 0;
 let revLastTs = 0;
@@ -392,7 +403,7 @@ watch(src, () => {
   failed.value = false;
   currentTime.value = 0;
   duration.value = 0;
-  speed.value = 1;
+  speed.value = settings.video.defaultSpeed;
   speedMenuOpen.value = false;
   clearShuttle();
   endHold();

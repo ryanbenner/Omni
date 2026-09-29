@@ -8,11 +8,21 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import VideoPlayer from "../VideoPlayer.vue";
 import type { MediaItem } from "../../types";
+import { settings, loadSettings } from "../../composables/settings";
 
 const item: MediaItem = { path: "/f/a.mp4", kind: "video", name: "a.mp4", mtime: 1, size: 0 };
 
+const mounted: ReturnType<typeof mount>[] = [];
+
+// leaked players answer store watchers
+afterEach(() => {
+  mounted.forEach((w) => w.unmount());
+  mounted.length = 0;
+});
+
 function mountPlayer(paused: boolean) {
   const w = mount(VideoPlayer, { props: { item } });
+  mounted.push(w);
   const el = w.find("video").element as HTMLVideoElement;
   // jsdom media elements never play: fake the state the feature keys off
   Object.defineProperty(el, "paused", { value: paused, configurable: true });
@@ -83,5 +93,51 @@ describe("VideoPlayer hold to speed up", () => {
     expect(el.playbackRate).toBe(2);
     await fire(w, video.element, "pointerup");
     expect(el.playbackRate).toBe(0.5);
+  });
+});
+
+describe("VideoPlayer settings", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("starts at the configured default and returns to it on a new file", async () => {
+    settings.video.defaultSpeed = 1.5;
+    const { w, el } = mountPlayer(false);
+    expect(w.find(".speed-chip").text()).toBe("1.5x");
+    el.dispatchEvent(new Event("loadedmetadata"));
+    expect(el.playbackRate).toBe(1.5);
+    await w.find(".speed-chip").trigger("click");
+    await w.findAll(".speed-opt").find((o) => o.text() === "0.5x")!.trigger("click");
+    expect(el.playbackRate).toBe(0.5);
+    await w.setProps({ item: { ...item, path: "/f/b.mp4", name: "b.mp4" } });
+    expect(w.find(".speed-chip").text()).toBe("1.5x");
+  });
+
+  it("the export panel shows the configured cap", async () => {
+    settings.video.clipCapMb = 25;
+    const { w, el } = mountPlayer(true);
+    Object.defineProperty(el, "duration", { value: 30, configurable: true });
+    await w.find("button[title='Trim clip']").trigger("click");
+    expect(w.find(".cap").text()).toContain("25 MB");
+  });
+
+  it("with persistent volume on, seeds from the store and mirrors both ways", async () => {
+    settings.video.persistentVolume = true;
+    settings.video.volume = 0.4;
+    settings.video.muted = true;
+    const { w, el } = mountPlayer(false);
+    el.dispatchEvent(new Event("loadedmetadata"));
+    expect(el.volume).toBe(0.4);
+    expect(el.muted).toBe(true);
+    await w.find(".volume").setValue("0.7");
+    await w.vm.$nextTick();
+    expect(settings.video.volume).toBe(0.7);
+    settings.video.volume = 0.2;
+    settings.video.muted = false;
+    await w.vm.$nextTick();
+    expect(el.volume).toBe(0.2);
+    expect(el.muted).toBe(false);
   });
 });

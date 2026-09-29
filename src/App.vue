@@ -10,6 +10,8 @@ import { exists } from "@tauri-apps/plugin-fs";
 import Titlebar from "./components/Titlebar.vue";
 import Viewer from "./components/Viewer.vue";
 import Sidebar from "./components/Sidebar.vue";
+import SettingsModal from "./components/settings/SettingsModal.vue";
+import { settings } from "./composables/settings";
 import { useMediaList } from "./composables/useMediaList";
 import { useKeyboard } from "./composables/useKeyboard";
 import { parentDir } from "./composables/pathUtils";
@@ -24,7 +26,8 @@ const CollageWall = defineAsyncComponent(() => import("./components/CollageWall.
 const list = useMediaList();
 const viewer = ref<InstanceType<typeof Viewer> | null>(null);
 const sidebar = ref<InstanceType<typeof Sidebar> | null>(null);
-const sidebarOpen = ref(true);
+const sidebarOpen = ref(settings.general.sidebarAtLaunch);
+const settingsOpen = ref(false);
 
 interface WallHandle {
   addPaths(paths: string[]): Promise<void>;
@@ -43,6 +46,13 @@ const resumePath = ref<string | null>(null);
 // the sidebar highlights the wall's selected item while the wall is open
 const wallSelected = ref<string | null>(null);
 watch(collageInit, () => (wallSelected.value = null));
+
+// settings close first so the unsaved-changes dialog is never hidden under them
+async function askWallToLeave(closing: boolean): Promise<boolean> {
+  if (!wall.value) return true;
+  settingsOpen.value = false;
+  return wall.value.requestLeave(closing);
+}
 
 const currentFolder = computed(() =>
   list.current.value ? parentDir(list.current.value.path) : null,
@@ -72,7 +82,11 @@ function onCommand(cmd: Command) {
   if (!handled && cmd.fallback) applyApp(cmd.fallback);
 }
 
-useKeyboard(() => (collageOpen.value ? "collage" : (list.current.value?.kind ?? null)), onCommand);
+useKeyboard(
+  () => (collageOpen.value ? "collage" : (list.current.value?.kind ?? null)),
+  onCommand,
+  () => !settingsOpen.value,
+);
 
 // ---- collage mode ----
 
@@ -93,7 +107,7 @@ async function openCollage(path: string) {
     else collageError.value = text;
     return;
   }
-  if (wall.value && !(await wall.value.requestLeave(false))) return;
+  if (!(await askWallToLeave(false))) return;
   collageError.value = null;
   collageInit.value = { doc, path };
 }
@@ -107,7 +121,7 @@ async function revealInSidebar(path: string) {
 
 // a wall that has not mounted yet has nothing to lose
 async function leaveCollage(): Promise<boolean> {
-  if (wall.value && !(await wall.value.requestLeave(false))) return false;
+  if (!(await askWallToLeave(false))) return false;
   const last = wall.value?.lastPath() ?? null;
   collageInit.value = null;
   collageStatus.value = "";
@@ -116,7 +130,7 @@ async function leaveCollage(): Promise<boolean> {
 }
 
 async function onWallExit(lastPath: string | null) {
-  if (wall.value && !(await wall.value.requestLeave(false))) return;
+  if (!(await askWallToLeave(false))) return;
   collageInit.value = null;
   collageStatus.value = "";
   if (lastPath) list.openFile(lastPath);
@@ -134,7 +148,7 @@ async function openFile(path: string) {
       await wall.value?.addPaths([path]);
       return;
     }
-    if (wall.value && !(await wall.value.requestLeave(false))) return;
+    if (!(await askWallToLeave(false))) return;
     collageInit.value = null;
     collageStatus.value = "";
   }
@@ -183,11 +197,14 @@ onMounted(async () => {
   getCurrentWindow().onCloseRequested(async (e) => {
     if (!wall.value?.isDirty()) return;
     e.preventDefault();
-    if (await wall.value.requestLeave(true)) await getCurrentWindow().destroy();
+    if (await askWallToLeave(true)) await getCurrentWindow().destroy();
   });
   await listen<string[]>("single-instance", (e) => {
     const path = pathFromArgv(e.payload);
-    if (path) openFile(path);
+    if (path) {
+      settingsOpen.value = false;
+      openFile(path);
+    }
   });
   try {
     const matches = await getMatches();
@@ -234,13 +251,16 @@ defineExpose({ openFile, enterCollage });
   <main class="app">
     <Titlebar
       :sidebar-open="sidebarOpen"
+      :settings-open="settingsOpen"
       :subtitle="collageOpen ? collageStatus : undefined"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
+      @toggle-settings="settingsOpen = !settingsOpen"
     />
     <div class="body-row">
       <Sidebar
         v-if="sidebarOpen"
         ref="sidebar"
+        :inert="settingsOpen || undefined"
         :current-path="collageOpen ? wallSelected : (list.current.value?.path ?? null)"
         :current-folder="currentFolder"
         @open-file="openFile"
@@ -248,7 +268,7 @@ defineExpose({ openFile, enterCollage });
         @file-deleted="list.removeItem"
         @file-renamed="list.renameItem"
       />
-      <div class="stage">
+      <div class="stage" :inert="settingsOpen || undefined">
         <CollageWall
           v-if="collageInit"
           ref="wall"
@@ -273,7 +293,7 @@ defineExpose({ openFile, enterCollage });
           <p v-if="collageError" class="error-text">{{ collageError }}</p>
           <p v-else-if="list.error.value" class="error-text">{{ list.error.value }}</p>
           <p v-else class="empty-hint">No file open. Open one to begin.</p>
-          <button v-if="resumePath" class="resume-btn" @click="openCollage(resumePath)">
+          <button v-if="resumePath && settings.general.offerResume" class="resume-btn" @click="openCollage(resumePath)">
             Resume {{ resumeName() }}
           </button>
           <button
@@ -285,6 +305,7 @@ defineExpose({ openFile, enterCollage });
           </button>
         </div>
       </div>
+      <SettingsModal v-if="settingsOpen" @close="settingsOpen = false" />
     </div>
   </main>
 </template>
@@ -297,6 +318,7 @@ defineExpose({ openFile, enterCollage });
   background: var(--color-bg);
 }
 .body-row {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;

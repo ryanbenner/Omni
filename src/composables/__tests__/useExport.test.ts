@@ -13,13 +13,14 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import {
-  CAP_BYTES,
+  clipCapBytes,
   ensureMp4,
   estimateClipBytes,
   formatMB,
   newClipName,
   useExport,
 } from "../useExport";
+import { settings, loadSettings } from "../settings";
 
 describe("estimateClipBytes", () => {
   it("scales the source size by the kept fraction", () => {
@@ -36,9 +37,19 @@ describe("estimateClipBytes", () => {
 
 describe("formatMB", () => {
   it("formats with one decimal, trimming .0, rounding at 100+", () => {
-    expect(formatMB(CAP_BYTES)).toBe("50 MB");
+    expect(formatMB(50 * 1024 * 1024)).toBe("50 MB");
     expect(formatMB(12.34 * 1024 * 1024)).toBe("12.3 MB");
     expect(formatMB(123.6 * 1024 * 1024)).toBe("124 MB");
+  });
+});
+
+describe("clipCapBytes", () => {
+  it("follows the setting", () => {
+    localStorage.clear();
+    loadSettings();
+    expect(clipCapBytes()).toBe(50 * 1024 * 1024);
+    settings.video.clipCapMb = 8;
+    expect(clipCapBytes()).toBe(8 * 1024 * 1024);
   });
 });
 

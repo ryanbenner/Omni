@@ -133,13 +133,20 @@ describe("exportArea", () => {
     writeMock.mockReset();
   });
 
-  it("encodes with the format's mime and writes through the image save path", async () => {
+  it("encodes with the format's mime and the given quality, and writes through the image save path", async () => {
     const { deps, canvases } = fakeDeps();
-    const out = await exportArea({ x: 0, y: 0, w: 100, h: 100 }, [item({})], "jpg", "/p/collage.jpg", deps);
+    const out = await exportArea({ x: 0, y: 0, w: 100, h: 100 }, [item({})], "jpg", 0.7, "/p/collage.jpg", deps);
     expect(out.missing).toEqual([]);
     expect(canvases[0].width).toBe(100);
     const blobCall = (canvases[0] as unknown as { convertToBlob: ReturnType<typeof vi.fn> }).convertToBlob.mock.calls[0][0];
-    expect(blobCall).toEqual({ type: "image/jpeg", quality: 0.92 });
+    expect(blobCall).toEqual({ type: "image/jpeg", quality: 0.7 });
     expect(writeMock).toHaveBeenCalledWith("/p/collage.jpg", new Uint8Array([9]));
+  });
+
+  it("png ignores quality", async () => {
+    const { deps, canvases } = fakeDeps();
+    await exportArea({ x: 0, y: 0, w: 100, h: 100 }, [item({})], "png", 0.7, "/p/collage.png", deps);
+    const blobCall = (canvases[0] as unknown as { convertToBlob: ReturnType<typeof vi.fn> }).convertToBlob.mock.calls[0][0];
+    expect(blobCall).toEqual({ type: "image/png" });
   });
 });

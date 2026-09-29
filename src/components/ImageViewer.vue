@@ -6,6 +6,7 @@ import type { MediaItem, ViewerAction } from "../types";
 import { useImageTransform } from "../composables/useImageTransform";
 import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
 import { parentDir, sepOf } from "../composables/pathUtils";
+import { settings } from "../composables/settings";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
 const emit = defineEmits<{ navigate: [dir: -1 | 1]; collage: [] }>();
@@ -42,11 +43,12 @@ watch(src, () => {
   menu.value = null;
 });
 
-const ZOOM_STEP = 1.1;
+const ZOOM_STEPS = { fine: 1.05, normal: 1.1, coarse: 1.2 } as const;
+const zoomStep = computed(() => ZOOM_STEPS[settings.image.zoomStep]);
 
 function onWheel(e: WheelEvent) {
   e.preventDefault();
-  t.zoomBy(e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+  t.zoomBy(e.deltaY < 0 ? zoomStep.value : 1 / zoomStep.value);
 }
 
 const dragging = ref(false);
@@ -200,11 +202,11 @@ defineExpose({ handleAction });
       <i class="ph ph-caret-right" />
     </button>
     <div v-if="!failed" class="pill" @pointerdown.stop="menu = null">
-      <button class="pill-btn" data-tip="Zoom out" @click="t.zoomBy(1 / ZOOM_STEP)">
+      <button class="pill-btn" data-tip="Zoom out" @click="t.zoomBy(1 / zoomStep)">
         <i class="ph ph-magnifying-glass-minus" />
       </button>
       <span class="pill-pct">{{ zoomPct }}</span>
-      <button class="pill-btn" data-tip="Zoom in" @click="t.zoomBy(ZOOM_STEP)">
+      <button class="pill-btn" data-tip="Zoom in" @click="t.zoomBy(zoomStep)">
         <i class="ph ph-magnifying-glass-plus" />
       </button>
       <span class="pill-div" />

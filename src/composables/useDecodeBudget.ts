@@ -1,6 +1,5 @@
 import { ref, type Ref } from "vue";
 
-// future settings page: Collage section, "wall memory cap"
 export const WALL_MEMORY_CAP_BYTES = 6 * 1024 ** 3;
 export const MIN_LEVEL = 64;
 // the budget's bitmap plus the item's canvas copy
@@ -60,7 +59,11 @@ export interface DecodeBudget {
   levelOf(id: string): number;
 }
 
-export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): DecodeBudget {
+export function useDecodeBudget(
+  decode: Decoder,
+  cap: number | (() => number) = WALL_MEMORY_CAP_BYTES,
+): DecodeBudget {
+  const capBytes = () => (typeof cap === "function" ? cap() : cap);
   const bytes = ref(0);
   const loaded = ref(0);
   const version = ref(0);
@@ -130,7 +133,7 @@ export function useDecodeBudget(decode: Decoder, cap = WALL_MEMORY_CAP_BYTES): D
   // concurrent requests can't all pass this check before any of them has committed
   function fits(self: Entry, level: number): boolean {
     const total = bytes.value + reservedTotal - self.bytes - self.reservedBytes;
-    return total + bytesAt(level, self.natural) <= cap;
+    return total + bytesAt(level, self.natural) <= capBytes();
   }
 
   // off-screen decodes go first, oldest hidden first

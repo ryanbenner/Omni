@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { settings } from "../composables/settings";
 defineProps<{
   busy: boolean;
   percent: number;
@@ -16,7 +17,7 @@ const emit = defineEmits<{
     <template v-if="!busy">
       <label class="cap">
         <input v-model="capped" type="checkbox" />
-        ≤ 50 MB
+        ≤ {{ settings.video.clipCapMb }} MB
       </label>
       <span class="spacer" />
       <button class="btn-primary" @click="emit('requestExport', false)">

@@ -57,7 +57,8 @@ describe("ExportPreview", () => {
     await w.find(".btn-accent.save").trigger("click");
     await flushPromises();
     expect(nextFreeMock).toHaveBeenCalledWith("C:\\Pics", "png");
-    expect(exportMock.mock.calls[0][3]).toBe("C:\\Pics\\collage1.png");
+    expect(exportMock.mock.calls[0][3]).toBe(0.92);
+    expect(exportMock.mock.calls[0][4]).toBe("C:\\Pics\\collage1.png");
     expect(saveDialogMock).not.toHaveBeenCalled();
     expect(w.emitted("saved")).toEqual([["C:\\Pics\\collage1.png"]]);
     w.unmount();
@@ -70,7 +71,7 @@ describe("ExportPreview", () => {
     await w.find(".btn-accent.save-as").trigger("click");
     await flushPromises();
     expect(saveDialogMock.mock.calls[0][0].defaultPath).toBe("C:\\Pics\\collage1.png");
-    expect(exportMock.mock.calls[0][3]).toBe("D:\\out.png");
+    expect(exportMock.mock.calls[0][4]).toBe("D:\\out.png");
     expect(w.emitted("saved")).toEqual([["D:\\out.png"]]);
     w.unmount();
   });
