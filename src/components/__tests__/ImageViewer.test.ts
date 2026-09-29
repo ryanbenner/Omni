@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 }));
 
 import ImageViewer from "../ImageViewer.vue";
+import { settings, loadSettings } from "../../composables/settings";
 
 const item = { path: "/p/a.jpg", kind: "image" as const, name: "a.jpg", mtime: 1, size: 0 };
 
@@ -34,5 +35,25 @@ describe("ImageViewer pill", () => {
     const vm = w.vm as unknown as { handleAction: (a: { type: string }) => boolean };
     expect(vm.handleAction({ type: "enterCollage" })).toBe(true);
     expect(w.emitted("collage")).toHaveLength(2);
+  });
+});
+
+describe("ImageViewer zoom step", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("scroll and the pill buttons use the configured step", async () => {
+    settings.image.zoomStep = "coarse";
+    const w = mount(ImageViewer, { props: { item } });
+    await w.find(".pill-btn[data-tip='Zoom in']").trigger("click");
+    expect(w.find(".pill-pct").text()).toBe("120%");
+    await w.find(".pill-btn[data-tip='Zoom out']").trigger("click");
+    expect(w.find(".pill-pct").text()).toBe("100%");
+    settings.image.zoomStep = "fine";
+    await w.vm.$nextTick();
+    await w.find(".image-viewer").trigger("wheel", { deltaY: -100 });
+    expect(w.find(".pill-pct").text()).toBe("105%");
   });
 });
