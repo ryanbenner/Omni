@@ -332,4 +332,17 @@ describe("useDecodeBudget", () => {
     expect(dec).toHaveBeenCalledTimes(10);
     expect(peak).toBe(4);
   });
+
+  it("re-reads a getter cap on every check, so a raised cap stops stepping others down", async () => {
+    let cap = bytesAt(512, nat);
+    const b = useDecodeBudget(decoder, () => cap);
+    b.setVisible("a", true);
+    b.setVisible("b", true);
+    await b.request("a", "/a.jpg", 512, nat);
+    cap = bytesAt(512, nat) * 4;
+    await b.request("b", "/b.jpg", 512, nat);
+    expect(b.levelOf("a")).toBe(512);
+    expect(b.levelOf("b")).toBe(512);
+    expect(b.loaded.value).toBe(2);
+  });
 });

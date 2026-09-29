@@ -10,6 +10,7 @@ import { resizeRect, rectsOverlap, type Handle } from "../composables/collageGeo
 import { validateArea } from "../composables/collageExport";
 import { writeCollage, COLLAGE_EXT } from "../composables/collageFile";
 import { joinPath, parentDir } from "../composables/pathUtils";
+import { settings } from "../composables/settings";
 import CollageItem from "./CollageItem.vue";
 import CollageTabs from "./CollageTabs.vue";
 import ExportPreview from "./ExportPreview.vue";
@@ -28,7 +29,10 @@ const CLICK_SLOP = 4;
 
 const collage = useCollage();
 const view = useWallView();
-const budget = useDecodeBudget((path, level, natural) => readBitmap(path, level, natural));
+const budget = useDecodeBudget(
+  (path, level, natural) => readBitmap(path, level, natural),
+  () => settings.collage.memoryCapGb * 1024 ** 3,
+);
 
 const stage = ref<HTMLElement | null>(null);
 const viewport = ref({ w: 1, h: 1 });

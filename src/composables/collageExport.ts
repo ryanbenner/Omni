@@ -5,7 +5,6 @@ import { mimeFor, writeImageBytes } from "./useImageSave";
 
 export const MAX_EXPORT_SIDE = 16384;
 export const MAX_EXPORT_PIXELS = 268_435_456;
-const JPG_QUALITY = 0.92;
 
 export interface Ctx2D {
   fillStyle: string;
@@ -110,12 +109,13 @@ export async function exportArea(
   rect: Rect,
   items: CollageItem[],
   format: ExportFormat,
+  quality: number,
   destPath: string,
   deps: RenderDeps,
 ): Promise<{ missing: string[] }> {
   const { canvas, missing } = await renderArea(rect, items, format, 1, deps);
   const blob = await canvas.convertToBlob(
-    format === "jpg" ? { type: mimeFor("jpg"), quality: JPG_QUALITY } : { type: mimeFor("png") },
+    format === "jpg" ? { type: mimeFor("jpg"), quality } : { type: mimeFor("png") },
   );
   await writeImageBytes(destPath, new Uint8Array(await blob.arrayBuffer()));
   return { missing };
