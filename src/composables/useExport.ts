@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { settings } from "./settings";
 
 export interface ExportRequest {
   input: string;
@@ -29,7 +30,9 @@ export function ensureMp4(name: string): string {
   return `${stem}.mp4`;
 }
 
-export const CAP_BYTES = 50 * 1024 * 1024;
+export function clipCapBytes(): number {
+  return settings.video.clipCapMb * 1024 * 1024;
+}
 
 // rough size preview: cq-mode nvenc output tracks the source bitrate, so
 // scale the source size by the kept fraction

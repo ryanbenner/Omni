@@ -8,6 +8,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import VideoPlayer from "../VideoPlayer.vue";
 import type { MediaItem } from "../../types";
+import { settings, loadSettings } from "../../composables/settings";
 
 const item: MediaItem = { path: "/f/a.mp4", kind: "video", name: "a.mp4", mtime: 1, size: 0 };
 
@@ -83,5 +84,33 @@ describe("VideoPlayer hold to speed up", () => {
     expect(el.playbackRate).toBe(2);
     await fire(w, video.element, "pointerup");
     expect(el.playbackRate).toBe(0.5);
+  });
+});
+
+describe("VideoPlayer default speed", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("starts at the configured default and returns to it on a new file", async () => {
+    settings.video.defaultSpeed = 1.5;
+    const { w, el } = mountPlayer(false);
+    expect(w.find(".speed-chip").text()).toBe("1.5x");
+    el.dispatchEvent(new Event("loadedmetadata"));
+    expect(el.playbackRate).toBe(1.5);
+    await w.find(".speed-chip").trigger("click");
+    await w.findAll(".speed-opt").find((o) => o.text() === "0.5x")!.trigger("click");
+    expect(el.playbackRate).toBe(0.5);
+    await w.setProps({ item: { ...item, path: "/f/b.mp4", name: "b.mp4" } });
+    expect(w.find(".speed-chip").text()).toBe("1.5x");
+  });
+
+  it("the export panel shows the configured cap", async () => {
+    settings.video.clipCapMb = 25;
+    const { w, el } = mountPlayer(true);
+    Object.defineProperty(el, "duration", { value: 30, configurable: true });
+    await w.find("button[title='Trim clip']").trigger("click");
+    expect(w.find(".cap").text()).toContain("25 MB");
   });
 });
