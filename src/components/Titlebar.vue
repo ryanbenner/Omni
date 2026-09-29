@@ -1,26 +1,34 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-defineProps<{ sidebarOpen: boolean; subtitle?: string }>();
-defineEmits<{ toggleSidebar: [] }>();
+defineProps<{ sidebarOpen: boolean; settingsOpen?: boolean; subtitle?: string }>();
+defineEmits<{ toggleSidebar: []; toggleSettings: [] }>();
 
 const win = getCurrentWindow();
 </script>
 
 <template>
   <div class="titlebar" data-tauri-drag-region>
-    <button
-      class="tb-sidebar"
-      :title="sidebarOpen ? 'Hide file tree' : 'Show file tree'"
-      @click="$emit('toggleSidebar')"
-    >
-      <i class="ph ph-sidebar-simple" />
-    </button>
     <div class="tb-brand" data-tauri-drag-region>
       <span class="tb-logo-prism" data-tauri-drag-region />
       <span class="tb-name" data-tauri-drag-region>Omni</span>
       <span v-if="subtitle" class="tb-sub" data-tauri-drag-region>· {{ subtitle }}</span>
     </div>
+    <button
+      class="tb-icon tb-sidebar"
+      :title="sidebarOpen ? 'Hide file tree' : 'Show file tree'"
+      @click="$emit('toggleSidebar')"
+    >
+      <i class="ph ph-sidebar-simple" />
+    </button>
+    <button
+      class="tb-icon tb-gear"
+      :class="{ active: settingsOpen }"
+      title="Settings"
+      @click="$emit('toggleSettings')"
+    >
+      <i class="ph ph-gear" />
+    </button>
     <div class="tb-spacer" data-tauri-drag-region />
     <div class="tb-controls">
       <button class="tb-btn tb-min" title="Minimize" @click="win.minimize()">
@@ -48,7 +56,7 @@ const win = getCurrentWindow();
   background: #131416;
   user-select: none;
 }
-.tb-sidebar {
+.tb-icon {
   width: 22px;
   height: 22px;
   display: grid;
@@ -60,7 +68,8 @@ const win = getCurrentWindow();
   cursor: pointer;
   font-size: 15px;
 }
-.tb-sidebar:hover {
+.tb-icon:hover,
+.tb-icon.active {
   background: var(--color-neutral-900);
   color: var(--color-accent-300);
 }
