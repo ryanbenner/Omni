@@ -132,7 +132,7 @@ describe("composition names", () => {
   it("nextFreeCompositionPath reads the folder listing", async () => {
     invokeMock.mockResolvedValue({ folders: [], files: [{ name: "collage.png" }] });
     expect(await nextFreeCompositionPath("C:\\Pics", "png")).toBe("C:\\Pics\\collage1.png");
-    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "C:\\Pics" });
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "C:\\Pics", showHidden: true });
   });
 
   it("nextFreeCompositionPath starts fresh when the folder is unreadable", async () => {

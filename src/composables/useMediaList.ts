@@ -3,6 +3,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import type { DirListing, MediaItem, ScanResult } from "../types";
 import { parentDir } from "./pathUtils";
+import { settings } from "./settings";
 
 const WATCH_DEBOUNCE_MS = 600;
 
@@ -16,7 +17,10 @@ export function useMediaList() {
 
   async function openFile(path: string) {
     try {
-      const result = await invoke<ScanResult>("scan_media", { path });
+      const result = await invoke<ScanResult>("scan_media", {
+        path,
+        showHidden: settings.general.showHidden,
+      });
       items.value = result.items;
       currentIndex.value = result.startIndex;
       error.value = null;
@@ -40,7 +44,10 @@ export function useMediaList() {
     const curPath = current.value?.path;
     let listing: DirListing;
     try {
-      listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+      listing = await invoke<DirListing>("read_dir_entries", {
+        path: dir,
+        showHidden: settings.general.showHidden,
+      });
     } catch {
       return; // folder unreadable right now: keep the list as it was
     }

@@ -287,7 +287,11 @@ async function commitRename() {
 function refreshDir(dirPath: string) {
   tree.refresh(dirPath);
 }
-defineExpose({ refreshDir });
+// re-reads every expanded folder and pin, e.g. when the hidden-files setting flips
+function reloadOpen() {
+  tree.resync();
+}
+defineExpose({ refreshDir, reloadOpen });
 
 async function copyToClipboard() {
   const m = menu.value;

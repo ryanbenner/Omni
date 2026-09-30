@@ -54,6 +54,14 @@ async function askWallToLeave(closing: boolean): Promise<boolean> {
   return wall.value.requestLeave(closing);
 }
 
+watch(
+  () => settings.general.showHidden,
+  () => {
+    sidebar.value?.reloadOpen();
+    list.resync();
+  },
+);
+
 const currentFolder = computed(() =>
   list.current.value ? parentDir(list.current.value.path) : null,
 );

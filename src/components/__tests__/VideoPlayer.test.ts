@@ -6,6 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => `asset://${p}`,
 }));
 
+import { invoke } from "@tauri-apps/api/core";
 import VideoPlayer from "../VideoPlayer.vue";
 import type { MediaItem } from "../../types";
 import { settings, loadSettings } from "../../composables/settings";
@@ -139,5 +140,14 @@ describe("VideoPlayer settings", () => {
     await w.vm.$nextTick();
     expect(el.volume).toBe(0.2);
     expect(el.muted).toBe(false);
+  });
+
+  it("clip name checks read the folder with hidden files included", async () => {
+    const { w, el } = mountPlayer(true);
+    Object.defineProperty(el, "duration", { value: 30, configurable: true });
+    await w.find("button[title='Trim clip']").trigger("click");
+    await w.find(".btn-primary").trigger("click");
+    await w.vm.$nextTick();
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
   });
 });

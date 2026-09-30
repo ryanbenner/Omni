@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import type { DirListing, DriveInfo, MediaKind, Pin } from "../types";
 import { ancestorDirs, displayLabel } from "./pathUtils";
+import { settings } from "./settings";
 
 export interface TreeRow {
   path: string;
@@ -80,7 +81,10 @@ export function useFileTree(openFile: (path: string) => void) {
   async function load(path: string) {
     const n = node(path);
     try {
-      n.listing = await invoke<DirListing>("read_dir_entries", { path });
+      n.listing = await invoke<DirListing>("read_dir_entries", {
+        path,
+        showHidden: settings.general.showHidden,
+      });
     } catch {
       n.listing = { folders: [], files: [] };
     }
@@ -140,7 +144,10 @@ export function useFileTree(openFile: (path: string) => void) {
 
   async function refreshPinCount(path: string) {
     try {
-      const listing = await invoke<DirListing>("read_dir_entries", { path });
+      const listing = await invoke<DirListing>("read_dir_entries", {
+        path,
+        showHidden: settings.general.showHidden,
+      });
       const pin = pins.value.find((p) => p.path === path);
       if (pin) {
         pin.count = listing.files.length;

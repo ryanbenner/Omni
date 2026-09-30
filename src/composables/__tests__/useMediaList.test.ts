@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 }));
 
 import { useMediaList } from "../useMediaList";
+import { settings, loadSettings } from "../settings";
 import type { ScanResult } from "../../types";
 
 const scanResult: ScanResult = {
@@ -26,6 +27,7 @@ const scanResult: ScanResult = {
 
 describe("useMediaList", () => {
   beforeEach(() => {
+    loadSettings();
     invokeMock.mockReset();
     // clone per call so tests that mutate items cannot bleed into each other
     invokeMock.mockImplementation(() => Promise.resolve(structuredClone(scanResult)));
@@ -35,7 +37,7 @@ describe("useMediaList", () => {
   it("openFile scans and lands on the launched file", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg", showHidden: false });
     expect(list.items.value).toHaveLength(3);
     expect(list.current.value?.name).toBe("mid.jpg");
   });
@@ -112,6 +114,16 @@ describe("useMediaList", () => {
     });
     list.renameItem("/f/ghost.mp4", "/f/x.mp4", "x.mp4"); // no-op
     expect(list.items.value).toHaveLength(3);
+  });
+
+  it("passes the show-hidden setting to scan_media and read_dir_entries", async () => {
+    settings.general.showHidden = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg", showHidden: true });
+    invokeMock.mockResolvedValueOnce({ folders: [], files: scanResult.items });
+    await list.resync();
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
   });
 });
 

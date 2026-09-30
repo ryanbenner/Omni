@@ -153,7 +153,7 @@ describe("App collage routing", () => {
     await app(w).openFile("/p/v.mp4");
     await flushPromises();
     expect(w.find(".wall-stub").exists()).toBe(false);
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/v.mp4" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/v.mp4", showHidden: false });
     w.unmount();
   });
 
@@ -199,7 +199,7 @@ describe("App collage routing", () => {
     w.findComponent(WallStub).vm.$emit("exit", "/p/last.jpg");
     await flushPromises();
     expect(w.find(".wall-stub").exists()).toBe(false);
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg", showHidden: false });
     w.unmount();
   });
 
@@ -211,7 +211,7 @@ describe("App collage routing", () => {
     await flushPromises();
     expect(wallSpies.requestLeave).toHaveBeenCalledWith(false);
     expect(w.find(".wall-stub").exists()).toBe(false);
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/last.jpg", showHidden: false });
     w.unmount();
   });
 
@@ -292,7 +292,7 @@ describe("App collage routing", () => {
     await app(w).openFile("/p/v.mp4");
     await flushPromises();
     expect(w.find(".wall-stub").exists()).toBe(false);
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/v.mp4" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/v.mp4", showHidden: false });
 
     app(w).enterCollage([]);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "c" }));
@@ -364,7 +364,7 @@ describe("App settings", () => {
     singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
     await flushPromises();
     expect(w.find(".settings").exists()).toBe(false);
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: false });
     w.unmount();
   });
 
@@ -436,6 +436,17 @@ describe("App settings", () => {
     settings.general.offerResume = false;
     await flushPromises();
     expect(w.find(".resume-btn").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("flipping show hidden files re-reads the media list's folder", async () => {
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    invokeMock.mockClear();
+    settings.general.showHidden = true;
+    await flushPromises();
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/p", showHidden: true });
     w.unmount();
   });
 });

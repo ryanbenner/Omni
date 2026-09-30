@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 }));
 
 import { useFileTree } from "../useFileTree";
+import { settings, loadSettings } from "../settings";
 import type { DirListing, DriveInfo } from "../../types";
 
 const drives: DriveInfo[] = [{ path: "C:\\", name: "C:" }];
@@ -44,6 +45,7 @@ describe("useFileTree", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     localStorage.clear();
+    loadSettings();
     wire();
   });
 
@@ -183,6 +185,16 @@ describe("useFileTree", () => {
     await tree.reveal("C:\\stray.mp4"); // outside the pinned folder
     expect(tree.scope.value).toBeNull();
     expect(tree.rows.value[0]).toMatchObject({ path: "C:\\", kind: "drive" });
+  });
+
+  it("passes the show-hidden setting when reading folders and pin counts", async () => {
+    settings.general.showHidden = true;
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.toggle("C:\\");
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "C:\\", showHidden: true });
+    await tree.addPin("C:\\Games", "Games");
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "C:\\Games", showHidden: true });
   });
 });
 
