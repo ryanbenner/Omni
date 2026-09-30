@@ -42,12 +42,23 @@ export function useMediaList() {
     if (!watched) return;
     const dir = watched.dir;
     const curPath = current.value?.path;
+    const showHidden = settings.general.showHidden;
+    if (curPath) {
+      // the scan keeps the open file listed even when hidden; it only fails
+      // when the file is gone, and then the listing below re-finds a neighbor
+      try {
+        const result = await invoke<ScanResult>("scan_media", { path: curPath, showHidden });
+        if (watched?.dir !== dir) return;
+        items.value = result.items;
+        currentIndex.value = result.startIndex;
+        return;
+      } catch {
+        // fall through to the listing
+      }
+    }
     let listing: DirListing;
     try {
-      listing = await invoke<DirListing>("read_dir_entries", {
-        path: dir,
-        showHidden: settings.general.showHidden,
-      });
+      listing = await invoke<DirListing>("read_dir_entries", { path: dir, showHidden });
     } catch {
       return; // folder unreadable right now: keep the list as it was
     }

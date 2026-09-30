@@ -451,7 +451,7 @@ describe("App settings", () => {
     invokeMock.mockClear();
     settings.general.showHidden = true;
     await flushPromises();
-    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/p", showHidden: true });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: true });
     w.unmount();
   });
 
