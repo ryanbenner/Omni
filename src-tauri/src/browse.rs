@@ -78,24 +78,49 @@ pub fn list_drives() -> Vec<DriveInfo> {
     }
 }
 
+#[cfg(windows)]
+fn attrs(entry: &std::fs::DirEntry) -> u32 {
+    use std::os::windows::fs::MetadataExt;
+    entry.metadata().map(|m| m.file_attributes()).unwrap_or(0)
+}
+
+// FILE_ATTRIBUTE_SYSTEM = 0x4: never listed, like explorer's default
+pub fn is_system(entry: &std::fs::DirEntry) -> bool {
+    #[cfg(windows)]
+    {
+        attrs(entry) & 0x4 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = entry;
+        false
+    }
+}
+
+// dotfiles everywhere, plus FILE_ATTRIBUTE_HIDDEN = 0x2 on windows
+pub fn is_hidden(entry: &std::fs::DirEntry, name: &str) -> bool {
+    if name.starts_with('.') {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        attrs(entry) & 0x2 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = entry;
+        false
+    }
+}
+
 #[tauri::command]
-pub fn read_dir_entries(path: String) -> Result<DirListing, String> {
+pub fn read_dir_entries(path: String, show_hidden: bool) -> Result<DirListing, String> {
     let mut folders = Vec::new();
     let mut files = Vec::new();
     for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())?.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        if is_system(&entry) || (!show_hidden && is_hidden(&entry, &name)) {
             continue;
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            // FILE_ATTRIBUTE_HIDDEN = 0x2, FILE_ATTRIBUTE_SYSTEM = 0x4
-            if let Ok(meta) = entry.metadata() {
-                if meta.file_attributes() & 0x6 != 0 {
-                    continue;
-                }
-            }
         }
         let Ok(ft) = entry.file_type() else { continue };
         if ft.is_dir() {
@@ -197,7 +222,7 @@ mod tests {
         File::create(dir.path().join("clip.mp4")).unwrap();
         File::create(dir.path().join("notes.txt")).unwrap();
         File::create(dir.path().join(".ds_thing.png")).unwrap();
-        let out = read_dir_entries(dir.path().to_string_lossy().into_owned()).unwrap();
+        let out = read_dir_entries(dir.path().to_string_lossy().into_owned(), false).unwrap();
         let names: Vec<_> = out.folders.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, vec!["Alpha", "zeta"]); // case-insensitive sort, hidden skipped
         assert_eq!(out.files.len(), 1);
@@ -206,7 +231,7 @@ mod tests {
 
     #[test]
     fn listing_errors_on_missing_dir() {
-        assert!(read_dir_entries("/definitely/not/here".into()).is_err());
+        assert!(read_dir_entries("/definitely/not/here".into(), false).is_err());
     }
 
     #[cfg(target_os = "macos")]
@@ -219,5 +244,72 @@ mod tests {
         paths.sort();
         paths.dedup();
         assert_eq!(paths.len(), drives.len()); // no duplicate volumes
+    }
+
+    fn file_names(dir: &std::path::Path, show_hidden: bool) -> Vec<String> {
+        let mut v: Vec<String> = read_dir_entries(dir.to_string_lossy().into_owned(), show_hidden)
+            .unwrap()
+            .files
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn dotfiles_are_hidden_unless_asked() {
+        let dir = tempfile::tempdir().unwrap();
+        File::create(dir.path().join("a.jpg")).unwrap();
+        File::create(dir.path().join(".b.jpg")).unwrap();
+        assert_eq!(file_names(dir.path(), false), vec!["a.jpg"]);
+        assert_eq!(file_names(dir.path(), true), vec![".b.jpg", "a.jpg"]);
+    }
+
+    #[test]
+    fn dot_folders_follow_the_same_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        create_dir(dir.path().join(".secret")).unwrap();
+        create_dir(dir.path().join("pics")).unwrap();
+        let names = |show: bool| -> Vec<String> {
+            let mut v: Vec<String> = read_dir_entries(dir.path().to_string_lossy().into_owned(), show)
+                .unwrap()
+                .folders
+                .into_iter()
+                .map(|f| f.name)
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(names(false), vec!["pics"]);
+        assert_eq!(names(true), vec![".secret", "pics"]);
+    }
+
+    #[test]
+    fn is_hidden_reads_the_name_and_is_system_is_false_for_plain_files() {
+        let dir = tempfile::tempdir().unwrap();
+        File::create(dir.path().join(".dot.jpg")).unwrap();
+        File::create(dir.path().join("plain.jpg")).unwrap();
+        for entry in std::fs::read_dir(dir.path()).unwrap().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            assert_eq!(is_hidden(&entry, &name), name.starts_with('.'));
+            assert!(!is_system(&entry));
+        }
+    }
+
+    // attrib is always on the windows path; the ci runner is windows-latest
+    #[cfg(windows)]
+    #[test]
+    fn windows_hidden_shows_on_request_and_system_never_does() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().unwrap();
+        let h = dir.path().join("h.jpg");
+        let s = dir.path().join("s.jpg");
+        File::create(&h).unwrap();
+        File::create(&s).unwrap();
+        assert!(Command::new("attrib").arg("+h").arg(&h).status().unwrap().success());
+        assert!(Command::new("attrib").arg("+s").arg(&s).status().unwrap().success());
+        assert_eq!(file_names(dir.path(), false), Vec::<String>::new());
+        assert_eq!(file_names(dir.path(), true), vec!["h.jpg"]);
     }
 }

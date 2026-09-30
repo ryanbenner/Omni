@@ -43,7 +43,8 @@ let dirNames: string[] = [];
 async function onRequestExport(replace: boolean) {
   const dir = parentDir(props.item.path);
   try {
-    const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+    // hidden files still collide with a clip name, so list every file
+    const listing = await invoke<DirListing>("read_dir_entries", { path: dir, showHidden: true });
     dirNames = listing.files.map((f) => f.name);
   } catch {
     dirNames = [];
@@ -149,7 +150,7 @@ async function onExport(
       await runExport({ input: srcPath, output: tmp, mode, target });
       // collision check happens before the original is touched, so a bad
       // chosen name can still be aborted with both copies intact
-      const listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+      const listing = await invoke<DirListing>("read_dir_entries", { path: dir, showHidden: true });
       const collides = listing.files.some(
         (f) =>
           f.name.toLowerCase() === finalName.toLowerCase() &&

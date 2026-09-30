@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 }));
 
 import { useMediaList } from "../useMediaList";
+import { settings, loadSettings } from "../settings";
 import type { ScanResult } from "../../types";
 
 const scanResult: ScanResult = {
@@ -26,6 +27,8 @@ const scanResult: ScanResult = {
 
 describe("useMediaList", () => {
   beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
     invokeMock.mockReset();
     // clone per call so tests that mutate items cannot bleed into each other
     invokeMock.mockImplementation(() => Promise.resolve(structuredClone(scanResult)));
@@ -35,7 +38,7 @@ describe("useMediaList", () => {
   it("openFile scans and lands on the launched file", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
-    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg" });
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg", showHidden: false });
     expect(list.items.value).toHaveLength(3);
     expect(list.current.value?.name).toBe("mid.jpg");
   });
@@ -113,6 +116,67 @@ describe("useMediaList", () => {
     list.renameItem("/f/ghost.mp4", "/f/x.mp4", "x.mp4"); // no-op
     expect(list.items.value).toHaveLength(3);
   });
+
+  it("passes the show-hidden setting to scan_media and read_dir_entries", async () => {
+    settings.general.showHidden = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg", showHidden: true });
+    invokeMock.mockRejectedValueOnce("gone");
+    invokeMock.mockResolvedValueOnce({ folders: [], files: scanResult.items });
+    await list.resync();
+    expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
+  });
+
+  it("wraps at both ends when the setting is on", async () => {
+    settings.general.wrapAround = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    list.next();
+    list.next();
+    expect(list.current.value?.name).toBe("new.mp4");
+    list.prev();
+    expect(list.current.value?.name).toBe("old.png");
+    expect(list.hasPrev.value).toBe(true);
+    expect(list.hasNext.value).toBe(true);
+  });
+
+  it("reports prev/next from the clamped position when wrap is off", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    expect(list.hasPrev.value).toBe(true);
+    expect(list.hasNext.value).toBe(true);
+    list.next();
+    expect(list.hasNext.value).toBe(false);
+    list.prev();
+    list.prev();
+    expect(list.hasPrev.value).toBe(false);
+  });
+
+  it("a single file never wraps and has no neighbors", async () => {
+    settings.general.wrapAround = true;
+    invokeMock.mockResolvedValue({ items: [scanResult.items[0]], startIndex: 0 });
+    const list = useMediaList();
+    await list.openFile("/f/new.mp4");
+    list.next();
+    list.prev();
+    expect(list.currentIndex.value).toBe(0);
+    expect(list.hasPrev.value).toBe(false);
+    expect(list.hasNext.value).toBe(false);
+  });
+
+  it("removing down to one file leaves no neighbors even with wrap on", async () => {
+    settings.general.wrapAround = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    list.removeItem("/f/new.mp4");
+    list.removeItem("/f/old.png");
+    expect(list.items.value).toHaveLength(1);
+    expect(list.hasPrev.value).toBe(false);
+    expect(list.hasNext.value).toBe(false);
+    list.next();
+    expect(list.current.value?.name).toBe("mid.jpg");
+  });
 });
 
 describe("useMediaList live updates", () => {
@@ -121,9 +185,11 @@ describe("useMediaList live updates", () => {
   const newer = { path: "/f/newer.mp4", kind: "video", name: "newer.mp4", mtime: 400, size: 0 };
 
   // scan_media answers openFile; read_dir_entries answers a folder re-read
-  function wire(files: unknown[]) {
+  // resync rescans the open file first; scanGone makes that fail so the listing answers
+  function wire(files: unknown[], scanGone = false) {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === "scan_media") return Promise.resolve(structuredClone(scanResult));
+      if (cmd === "scan_media")
+        return scanGone ? Promise.reject("gone") : Promise.resolve(structuredClone(scanResult));
       if (cmd === "read_dir_entries") return Promise.resolve({ folders: [], files });
       return Promise.reject(`unexpected ${cmd}`);
     });
@@ -157,7 +223,7 @@ describe("useMediaList live updates", () => {
   it("a new file in the folder joins the list without moving the current file", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
-    wire([newer, ...scanResult.items]);
+    wire([newer, ...scanResult.items], true);
     watchers.get("/f")!();
     await flush();
     expect(list.items.value.map((i) => i.name)).toEqual(["newer.mp4", "new.mp4", "mid.jpg", "old.png"]);
@@ -167,7 +233,7 @@ describe("useMediaList live updates", () => {
   it("the current file vanishing outside the app moves to its neighbor", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
-    wire(scanResult.items.filter((i) => i.name !== "mid.jpg"));
+    wire(scanResult.items.filter((i) => i.name !== "mid.jpg"), true);
     watchers.get("/f")!();
     await flush();
     expect(list.current.value?.name).toBe("old.png");
@@ -189,7 +255,7 @@ describe("useMediaList live updates", () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
     const wall = { path: "/f/wall.collage", kind: "collage", name: "wall.collage", mtime: 250, size: 0 };
-    wire([newer, wall, ...scanResult.items]);
+    wire([newer, wall, ...scanResult.items], true);
     await list.resync();
     expect(list.items.value.map((i) => i.name)).toEqual(["newer.mp4", "new.mp4", "mid.jpg", "old.png"]);
     expect(list.current.value?.name).toBe("mid.jpg");
@@ -201,8 +267,35 @@ describe("useMediaList live updates", () => {
   it("resync re-reads the current folder", async () => {
     const list = useMediaList();
     await list.openFile("/f/mid.jpg");
-    wire([newer, ...scanResult.items]);
+    wire([newer, ...scanResult.items], true);
     await list.resync();
     expect(list.items.value).toHaveLength(4);
+  });
+
+  it("resync keeps a hidden open file listed even with show hidden off", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "scan_media"
+        ? Promise.resolve({ items: [scanResult.items[0], scanResult.items[1]], startIndex: 1 })
+        : Promise.resolve({ folders: [], files: [scanResult.items[0]] }),
+    );
+    await list.resync();
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/f/mid.jpg", showHidden: false });
+    expect(list.current.value?.path).toBe("/f/mid.jpg");
+    expect(list.items.value).toHaveLength(2);
+  });
+
+  it("resync falls back to the listing when the open file is gone", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "scan_media"
+        ? Promise.reject("gone")
+        : Promise.resolve({ folders: [], files: [scanResult.items[0], scanResult.items[2]] }),
+    );
+    await list.resync();
+    expect(list.items.value.map((i) => i.name)).toEqual(["new.mp4", "old.png"]);
+    expect(list.current.value?.name).toBe("old.png");
   });
 });

@@ -98,4 +98,31 @@ describe("settings store", () => {
     get.mockRestore();
     set.mockRestore();
   });
+
+  it("general gains wrap, hidden, reopen and confirm fields with today's defaults", () => {
+    loadSettings();
+    expect(settings.general).toEqual({
+      sidebarAtLaunch: true,
+      offerResume: true,
+      wrapAround: false,
+      showHidden: false,
+      reopen: "off",
+      confirmDelete: true,
+    });
+  });
+
+  it("validates the new general fields one by one", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ general: { wrapAround: true, showHidden: "yes", reopen: "file", confirmDelete: 0 } }),
+    );
+    loadSettings();
+    expect(settings.general.wrapAround).toBe(true);
+    expect(settings.general.showHidden).toBe(false);
+    expect(settings.general.reopen).toBe("file");
+    expect(settings.general.confirmDelete).toBe(true);
+    localStorage.setItem(KEY, JSON.stringify({ general: { reopen: "always" } }));
+    loadSettings();
+    expect(settings.general.reopen).toBe("off");
+  });
 });

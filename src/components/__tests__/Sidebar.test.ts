@@ -8,6 +8,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(), message: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({ watch: () => Promise.resolve(() => {}) }));
 
+import { ask } from "@tauri-apps/plugin-dialog";
+import { settings, loadSettings } from "../../composables/settings";
 import Sidebar from "../Sidebar.vue";
 
 const ROW = 26;
@@ -195,6 +197,104 @@ describe("Sidebar collage entry", () => {
     expect(w.findAll(".menu-item").some((m) => m.text() === "Collage")).toBe(false);
     await rows[3].trigger("contextmenu", { clientX: 5, clientY: 5 }); // v.mp4
     expect(w.findAll(".menu-item").some((m) => m.text() === "Collage")).toBe(false);
+    w.unmount();
+  });
+});
+
+describe("Sidebar delete", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    vi.mocked(ask).mockReset();
+    localStorage.clear();
+    loadSettings();
+    document.body.innerHTML = "";
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
+      if (cmd === "read_dir_entries")
+        return Promise.resolve({
+          folders: [],
+          files: [{ path: "C:\\a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 }],
+        });
+      if (cmd === "delete_file") return Promise.resolve();
+      return Promise.reject(`unexpected ${cmd}`);
+    });
+  });
+
+  async function openMenuOnA() {
+    const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null }, attachTo: document.body });
+    await flushPromises();
+    await w.find(".tree-row").trigger("click"); // expand C:
+    await flushPromises();
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    return w;
+  }
+
+  it("sidebar delete without confirmation still emits fileDeleted", async () => {
+    settings.general.confirmDelete = false;
+    const w = await openMenuOnA();
+    await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
+    await flushPromises();
+    expect(ask).not.toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("delete_file", { path: "C:\\a.jpg" });
+    expect(w.emitted("fileDeleted")).toEqual([["C:\\a.jpg"]]);
+    w.unmount();
+  });
+
+  it("asks first when confirmation is on", async () => {
+    vi.mocked(ask).mockResolvedValue(false);
+    const w = await openMenuOnA();
+    await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
+    await flushPromises();
+    expect(ask).toHaveBeenCalledOnce();
+    expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
+    w.unmount();
+  });
+});
+
+describe("Sidebar reveal folder", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    // jsdom has no scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn();
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
+      if (cmd === "read_dir_entries") {
+        if (args?.path === "C:\\") return Promise.resolve({ folders: [{ path: "C:\\Pics", name: "Pics" }], files: [] });
+        if (args?.path === "C:\\Pics")
+          return Promise.resolve({
+            folders: [],
+            files: [{ path: "C:\\Pics\\a.jpg", kind: "image", name: "a.jpg", mtime: 1, size: 0 }],
+          });
+      }
+      return Promise.reject(`unexpected ${cmd} ${args?.path}`);
+    });
+  });
+
+  it("expands the folder, scrolls to it and emits folderRevealed", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null, revealFolder: "C:\\Pics" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.findAll(".tree-row.selected")).toHaveLength(0);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(w.emitted("folderRevealed")).toHaveLength(1);
+    w.unmount();
+  });
+
+  it("a folder set after mount is revealed too", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null, revealFolder: null },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await w.setProps({ revealFolder: "C:\\Pics" });
+    await flushPromises();
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.emitted("folderRevealed")).toHaveLength(1);
     w.unmount();
   });
 });

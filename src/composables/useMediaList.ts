@@ -3,6 +3,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { watch as watchDir, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import type { DirListing, MediaItem, ScanResult } from "../types";
 import { parentDir } from "./pathUtils";
+import { settings } from "./settings";
 
 const WATCH_DEBOUNCE_MS = 600;
 
@@ -16,7 +17,10 @@ export function useMediaList() {
 
   async function openFile(path: string) {
     try {
-      const result = await invoke<ScanResult>("scan_media", { path });
+      const result = await invoke<ScanResult>("scan_media", {
+        path,
+        showHidden: settings.general.showHidden,
+      });
       items.value = result.items;
       currentIndex.value = result.startIndex;
       error.value = null;
@@ -38,9 +42,23 @@ export function useMediaList() {
     if (!watched) return;
     const dir = watched.dir;
     const curPath = current.value?.path;
+    const showHidden = settings.general.showHidden;
+    if (curPath) {
+      // the scan keeps the open file listed even when hidden; it only fails
+      // when the file is gone, and then the listing below re-finds a neighbor
+      try {
+        const result = await invoke<ScanResult>("scan_media", { path: curPath, showHidden });
+        if (watched?.dir !== dir) return;
+        items.value = result.items;
+        currentIndex.value = result.startIndex;
+        return;
+      } catch {
+        // fall through to the listing
+      }
+    }
     let listing: DirListing;
     try {
-      listing = await invoke<DirListing>("read_dir_entries", { path: dir });
+      listing = await invoke<DirListing>("read_dir_entries", { path: dir, showHidden });
     } catch {
       return; // folder unreadable right now: keep the list as it was
     }
@@ -70,12 +88,28 @@ export function useMediaList() {
     }
   }
 
+  const hasPrev = computed(() =>
+    settings.general.wrapAround ? items.value.length > 1 : currentIndex.value > 0,
+  );
+  const hasNext = computed(() =>
+    settings.general.wrapAround
+      ? items.value.length > 1
+      : currentIndex.value < items.value.length - 1,
+  );
+
+  function step(delta: 1 | -1) {
+    const n = items.value.length;
+    if (n < 2) return;
+    if (settings.general.wrapAround) jumpTo((currentIndex.value + delta + n) % n);
+    else jumpTo(currentIndex.value + delta);
+  }
+
   function next() {
-    jumpTo(currentIndex.value + 1);
+    step(1);
   }
 
   function prev() {
-    jumpTo(currentIndex.value - 1);
+    step(-1);
   }
 
   function removeItem(path: string) {
@@ -113,6 +147,8 @@ export function useMediaList() {
     currentIndex,
     current,
     error,
+    hasPrev,
+    hasNext,
     openFile,
     next,
     prev,

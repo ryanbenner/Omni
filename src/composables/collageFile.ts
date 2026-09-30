@@ -113,7 +113,8 @@ export function nextFreeName(existing: Iterable<string>, ext: ExportFormat): str
 export async function nextFreeCompositionPath(folder: string, ext: ExportFormat): Promise<string> {
   let names: string[] = [];
   try {
-    const listing = await invoke<DirListing>("read_dir_entries", { path: folder });
+    // hidden files still collide with a name, so list every file
+    const listing = await invoke<DirListing>("read_dir_entries", { path: folder, showHidden: true });
     names = listing.files.map((f) => f.name);
   } catch {
     // unreadable folder: the save dialog will surface the real problem

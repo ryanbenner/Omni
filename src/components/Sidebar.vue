@@ -4,17 +4,23 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
+import { settings } from "../composables/settings";
 import { parentDir } from "../composables/pathUtils";
 import { extOf } from "../composables/useImageSave";
 import { filePreview, videoThumbnail } from "../composables/dragPreview";
 import type { MediaKind, Pin } from "../types";
 
-const props = defineProps<{ currentPath: string | null; currentFolder: string | null }>();
+const props = defineProps<{
+  currentPath: string | null;
+  currentFolder: string | null;
+  revealFolder?: string | null;
+}>();
 const emit = defineEmits<{
   openFile: [path: string];
   fileDeleted: [path: string];
   fileRenamed: [oldPath: string, newPath: string, newName: string];
   addToCollage: [path: string];
+  folderRevealed: [];
 }>();
 
 const tree = useFileTree((p) => emit("openFile", p));
@@ -33,6 +39,21 @@ watch(
       await nextTick();
       root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
     }
+  },
+  { immediate: true },
+);
+
+// a folder to show with nothing open (reopen at launch); immediate so a
+// sidebar mounted later in the session still honors a pending folder
+watch(
+  () => props.revealFolder,
+  async (dir) => {
+    if (!dir) return;
+    await tree.revealDir(dir);
+    await nextTick();
+    const i = tree.rows.value.findIndex((r) => r.path === dir);
+    if (i >= 0) root.value?.querySelectorAll(".tree-row")[i]?.scrollIntoView({ block: "nearest" });
+    emit("folderRevealed");
   },
   { immediate: true },
 );
@@ -287,7 +308,11 @@ async function commitRename() {
 function refreshDir(dirPath: string) {
   tree.refresh(dirPath);
 }
-defineExpose({ refreshDir });
+// re-reads every expanded folder and pin, e.g. when the hidden-files setting flips
+function reloadOpen() {
+  tree.resync();
+}
+defineExpose({ refreshDir, reloadOpen });
 
 async function copyToClipboard() {
   const m = menu.value;
@@ -304,11 +329,13 @@ async function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
   if (!m) return;
-  const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
-    title: "Delete file",
-    kind: "warning",
-  });
-  if (!yes) return;
+  if (settings.general.confirmDelete) {
+    const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
+      title: "Delete file",
+      kind: "warning",
+    });
+    if (!yes) return;
+  }
   try {
     await invoke("delete_file", { path: m.path });
     await tree.refresh(parentDir(m.path));

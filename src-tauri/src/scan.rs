@@ -65,7 +65,7 @@ pub fn media_item_from_entry(entry: &std::fs::DirEntry) -> Option<MediaItem> {
 }
 
 #[tauri::command]
-pub fn scan_media(path: String) -> Result<ScanResult, String> {
+pub fn scan_media(path: String, show_hidden: bool) -> Result<ScanResult, String> {
     let launched = PathBuf::from(&path)
         .canonicalize()
         .map_err(|e| format!("cannot open {path}: {e}"))?;
@@ -74,6 +74,13 @@ pub fn scan_media(path: String) -> Result<ScanResult, String> {
     let dir = Path::new(&path).parent().ok_or("file has no parent directory")?;
     let mut items = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let filtered =
+            crate::browse::is_system(&entry) || (!show_hidden && crate::browse::is_hidden(&entry, &name));
+        // the launched file always shows, hidden or not
+        if filtered && entry.path().canonicalize().map(|c| c != launched).unwrap_or(true) {
+            continue;
+        }
         if let Some(item) = media_item_from_entry(&entry) {
             if item.kind != "collage" {
                 items.push(item);
@@ -128,7 +135,7 @@ mod tests {
         let pic = dir.path().join("a.jpg");
         File::create(&pic).unwrap();
         File::create(dir.path().join("wall.collage")).unwrap();
-        let out = scan_media(pic.to_string_lossy().into_owned()).unwrap();
+        let out = scan_media(pic.to_string_lossy().into_owned(), false).unwrap();
         assert_eq!(out.items.len(), 1);
         assert_eq!(out.items[0].name, "a.jpg");
     }
@@ -148,14 +155,14 @@ mod tests {
             File::create(dir.path().join(name)).unwrap();
         }
         let launched = dir.path().join("photo.jpg");
-        let result = scan_media(launched.to_string_lossy().into_owned()).unwrap();
+        let result = scan_media(launched.to_string_lossy().into_owned(), false).unwrap();
         assert_eq!(result.items.len(), 2); // txt filtered out
         assert_eq!(result.items[result.start_index].name, "photo.jpg");
     }
 
     #[test]
     fn scan_errors_on_missing_file() {
-        assert!(scan_media("/definitely/not/a/real/file.mp4".into()).is_err());
+        assert!(scan_media("/definitely/not/a/real/file.mp4".into(), false).is_err());
     }
 
     #[test]
@@ -168,7 +175,7 @@ mod tests {
         // whatever form the caller used (e.g. windows verbatim \\?\ prefix
         // would otherwise leak into every returned item.path)
         let launched = dir.path().join("photo.jpg");
-        let result = scan_media(launched.to_string_lossy().into_owned()).unwrap();
+        let result = scan_media(launched.to_string_lossy().into_owned(), false).unwrap();
         let expected_prefix = dir.path().to_string_lossy().into_owned();
         for item in &result.items {
             assert!(
@@ -178,5 +185,22 @@ mod tests {
                 expected_prefix
             );
         }
+    }
+
+    #[test]
+    fn scan_hides_dotfiles_unless_asked_but_always_keeps_the_launched_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let pic = dir.path().join("a.jpg");
+        let dot = dir.path().join(".b.jpg");
+        File::create(&pic).unwrap();
+        File::create(&dot).unwrap();
+        let out = scan_media(pic.to_string_lossy().into_owned(), false).unwrap();
+        assert_eq!(out.items.len(), 1);
+        let out = scan_media(pic.to_string_lossy().into_owned(), true).unwrap();
+        assert_eq!(out.items.len(), 2);
+        // opened from explorer while hidden: still the file the user chose
+        let out = scan_media(dot.to_string_lossy().into_owned(), false).unwrap();
+        assert_eq!(out.items.len(), 2);
+        assert_eq!(out.items[out.start_index].name, ".b.jpg");
     }
 }
