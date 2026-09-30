@@ -609,4 +609,47 @@ describe("App reopen at launch", () => {
     expect(readsOf("/p")).toBeGreaterThan(0);
     w.unmount();
   });
+
+  it("a file the user opens while reopen is still checking wins", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "file";
+    let resolveExists!: (v: boolean) => void;
+    vi.mocked(exists).mockImplementationOnce(() => new Promise<boolean>((r) => (resolveExists = r)));
+    const w = await mountApp();
+    await app(w).openFile("/p/user.jpg");
+    await flushPromises();
+    resolveExists(true);
+    await flushPromises();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: false });
+    expect(w.findComponent(Viewer).props("item").path).toBe("/p/user.jpg");
+    w.unmount();
+  });
+
+  it("a command-line file that fails to open still wins over reopen", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "file";
+    vi.mocked(getMatches).mockResolvedValueOnce({ args: { file: { value: "/p/bad.mp4" } } } as never);
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) =>
+      cmd === "scan_media" && args?.path === "/p/bad.mp4" ? Promise.reject("scan failed") : base(cmd, args),
+    );
+    const w = await mountApp();
+    expect(w.find(".error-text").text()).toBe("scan failed");
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: false });
+    w.unmount();
+  });
+
+  it("opening a collage drops a pending folder", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "folder";
+    settings.general.sidebarAtLaunch = false;
+    const w = await mountApp();
+    await flushPromises();
+    app(w).enterCollage([]);
+    await flushPromises();
+    await w.find(".tb-sidebar").trigger("click");
+    await flushPromises();
+    expect(readsOf("/p")).toBe(0);
+    w.unmount();
+  });
 });

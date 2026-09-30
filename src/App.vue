@@ -47,6 +47,8 @@ const resumePath = ref<string | null>(null);
 const LAST_FILE_KEY = "mv-last-file";
 // a folder to show in the tree at launch when no file is reopened
 const pendingFolder = ref<string | null>(null);
+// set the moment the user opens anything, so a slow reopen never overrides them
+let userOpened = false;
 
 // only pictures and videos reach list.current, so collages are never recorded
 watch(
@@ -72,21 +74,31 @@ async function reopenLast() {
     return;
   }
   if (!stored || extOf(stored) === COLLAGE_EXT) return;
+  const taken = () => userOpened || list.current.value !== null || collageOpen.value;
   try {
-    if (mode === "file" && (await exists(stored))) {
-      await list.openFile(stored);
-      return;
+    if (mode === "file") {
+      const there = await exists(stored);
+      if (taken()) return;
+      if (there) {
+        await list.openFile(stored);
+        return;
+      }
     }
     // the file is gone or only the folder was asked for: land in the folder
     const dir = parentDir(stored);
-    if (await exists(dir)) pendingFolder.value = dir;
+    const dirThere = await exists(dir);
+    if (taken()) return;
+    if (dirThere) pendingFolder.value = dir;
   } catch {
     // fs unavailable: start empty
   }
 }
 // the sidebar highlights the wall's selected item while the wall is open
 const wallSelected = ref<string | null>(null);
-watch(collageInit, () => (wallSelected.value = null));
+watch(collageInit, (init) => {
+  wallSelected.value = null;
+  if (init) pendingFolder.value = null;
+});
 
 // settings close first so the unsaved-changes dialog is never hidden under them
 async function askWallToLeave(closing: boolean): Promise<boolean> {
@@ -140,12 +152,14 @@ useKeyboard(
 // ---- collage mode ----
 
 function enterCollage(seedPaths: string[]) {
+  userOpened = true;
   collageError.value = null;
   collageInit.value = { doc: emptyDoc(), path: null, seedPaths };
 }
 
 // read first so a bad file never costs the current stage, dirty or not
 async function openCollage(path: string) {
+  userOpened = true;
   let doc: CollageDoc;
   try {
     doc = await readCollage(path);
@@ -186,6 +200,7 @@ async function onWallExit(lastPath: string | null) {
 }
 
 async function openFile(path: string) {
+  userOpened = true;
   const ext = extOf(path);
   if (ext === COLLAGE_EXT) {
     await openCollage(path);
@@ -264,7 +279,7 @@ onMounted(async () => {
   } catch {
     // cli plugin unavailable (e.g. dev on mac without args); stay on empty state
   }
-  if (!list.current.value && !collageOpen.value) await reopenLast();
+  if (!userOpened && !list.current.value && !collageOpen.value) await reopenLast();
   if (!list.current.value && !collageOpen.value) checkResume();
 });
 
