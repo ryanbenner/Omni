@@ -321,4 +321,24 @@ describe("live updates", () => {
     expect(reads("C:\\")).toBe(root + 1);
     expect(reads("C:\\Users")).toBe(users + 1);
   });
+
+  it("revealDir expands the folder itself and its ancestors without selecting anything", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.revealDir("C:\\Users");
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\pic.jpg"]);
+    expect(tree.rows.value[1].open).toBe(true);
+    expect(tree.rows.value.some((r) => r.selected)).toBe(false);
+  });
+
+  it("revealDir outside a pin scope drops back to the full tree", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.addPin("C:\\Games", "Games");
+    await tree.pinClick(tree.pins.value[0]);
+    expect(tree.scope.value?.path).toBe("C:\\Games");
+    await tree.revealDir("C:\\Users");
+    expect(tree.scope.value).toBeNull();
+    expect(tree.rows.value.map((r) => r.path)).toContain("C:\\Users\\pic.jpg");
+  });
 });

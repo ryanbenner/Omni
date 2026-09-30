@@ -109,26 +109,15 @@ export function useFileTree(openFile: (path: string) => void) {
     version.value++;
   }
 
-  async function reveal(filePath: string) {
+  // expands each dir in order; inside a pin scope only the dirs within it,
+  // and a target outside the scope drops back to the full tree
+  async function expandDirs(dirs: string[]) {
+    const target = dirs[dirs.length - 1];
     const s = scope.value;
-    if (s) {
-      if (isWithin(filePath, s.path)) {
-        // expand only within the scoped folder
-        for (const dir of ancestorDirs(filePath)) {
-          if (!isWithin(dir, s.path)) continue;
-          const n = node(dir);
-          if (!n.open) {
-            await load(dir);
-            n.open = true;
-          }
-        }
-        version.value++;
-        return;
-      }
-      // file lives outside the scoped folder: drop back to the full tree
-      scope.value = null;
-    }
-    for (const dir of ancestorDirs(filePath)) {
+    if (s && target && !isWithin(target, s.path)) scope.value = null;
+    const inScope = scope.value;
+    for (const dir of dirs) {
+      if (inScope && !isWithin(dir, inScope.path)) continue;
       const n = node(dir);
       if (!n.open) {
         await load(dir);
@@ -136,6 +125,15 @@ export function useFileTree(openFile: (path: string) => void) {
       }
     }
     version.value++;
+  }
+
+  async function reveal(filePath: string) {
+    await expandDirs(ancestorDirs(filePath));
+  }
+
+  // the folder itself opens too: used at launch when no file is open
+  async function revealDir(dir: string) {
+    await expandDirs([...ancestorDirs(dir), dir]);
   }
 
   function setCurrent(path: string | null) {
@@ -317,6 +315,7 @@ export function useFileTree(openFile: (path: string) => void) {
     init,
     toggle,
     reveal,
+    revealDir,
     setCurrent,
     addPin,
     removePin,

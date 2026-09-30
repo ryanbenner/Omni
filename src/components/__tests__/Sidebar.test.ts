@@ -250,3 +250,51 @@ describe("Sidebar delete", () => {
     w.unmount();
   });
 });
+
+describe("Sidebar reveal folder", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    // jsdom has no scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn();
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
+      if (cmd === "read_dir_entries") {
+        if (args?.path === "C:\\") return Promise.resolve({ folders: [{ path: "C:\\Pics", name: "Pics" }], files: [] });
+        if (args?.path === "C:\\Pics")
+          return Promise.resolve({
+            folders: [],
+            files: [{ path: "C:\\Pics\\a.jpg", kind: "image", name: "a.jpg", mtime: 1, size: 0 }],
+          });
+      }
+      return Promise.reject(`unexpected ${cmd} ${args?.path}`);
+    });
+  });
+
+  it("expands the folder, scrolls to it and emits folderRevealed", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null, revealFolder: "C:\\Pics" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.findAll(".tree-row.selected")).toHaveLength(0);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(w.emitted("folderRevealed")).toHaveLength(1);
+    w.unmount();
+  });
+
+  it("a folder set after mount is revealed too", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null, revealFolder: null },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await w.setProps({ revealFolder: "C:\\Pics" });
+    await flushPromises();
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.emitted("folderRevealed")).toHaveLength(1);
+    w.unmount();
+  });
+});
