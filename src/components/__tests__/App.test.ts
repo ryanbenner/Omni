@@ -449,4 +449,29 @@ describe("App settings", () => {
     expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/p", showHidden: true });
     w.unmount();
   });
+
+  it("with wrap on, the viewer's arrows stay enabled at the ends", async () => {
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === "scan_media") {
+        return Promise.resolve({
+          items: [
+            { path: "/p/a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 },
+            { path: "/p/b.jpg", kind: "image", name: "b.jpg", mtime: 1, size: 0 },
+          ],
+          startIndex: 1,
+        });
+      }
+      return base(cmd, args);
+    });
+    const w = await mountApp();
+    await app(w).openFile("/p/b.jpg");
+    await flushPromises();
+    expect(w.find("button[title='Next file']").attributes("disabled")).toBeDefined();
+    settings.general.wrapAround = true;
+    await flushPromises();
+    expect(w.find("button[title='Next file']").attributes("disabled")).toBeUndefined();
+    expect(w.find("button[title='Previous file']").attributes("disabled")).toBeUndefined();
+    w.unmount();
+  });
 });

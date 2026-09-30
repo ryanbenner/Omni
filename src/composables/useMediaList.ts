@@ -77,12 +77,28 @@ export function useMediaList() {
     }
   }
 
+  const hasPrev = computed(() =>
+    settings.general.wrapAround ? items.value.length > 1 : currentIndex.value > 0,
+  );
+  const hasNext = computed(() =>
+    settings.general.wrapAround
+      ? items.value.length > 1
+      : currentIndex.value < items.value.length - 1,
+  );
+
+  function step(delta: 1 | -1) {
+    const n = items.value.length;
+    if (n < 2) return;
+    if (settings.general.wrapAround) jumpTo((currentIndex.value + delta + n) % n);
+    else jumpTo(currentIndex.value + delta);
+  }
+
   function next() {
-    jumpTo(currentIndex.value + 1);
+    step(1);
   }
 
   function prev() {
-    jumpTo(currentIndex.value - 1);
+    step(-1);
   }
 
   function removeItem(path: string) {
@@ -120,6 +136,8 @@ export function useMediaList() {
     currentIndex,
     current,
     error,
+    hasPrev,
+    hasNext,
     openFile,
     next,
     prev,

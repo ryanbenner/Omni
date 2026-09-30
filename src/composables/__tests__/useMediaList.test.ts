@@ -27,6 +27,7 @@ const scanResult: ScanResult = {
 
 describe("useMediaList", () => {
   beforeEach(() => {
+    localStorage.clear();
     loadSettings();
     invokeMock.mockReset();
     // clone per call so tests that mutate items cannot bleed into each other
@@ -124,6 +125,56 @@ describe("useMediaList", () => {
     invokeMock.mockResolvedValueOnce({ folders: [], files: scanResult.items });
     await list.resync();
     expect(invokeMock).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
+  });
+
+  it("wraps at both ends when the setting is on", async () => {
+    settings.general.wrapAround = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    list.next();
+    list.next();
+    expect(list.current.value?.name).toBe("new.mp4");
+    list.prev();
+    expect(list.current.value?.name).toBe("old.png");
+    expect(list.hasPrev.value).toBe(true);
+    expect(list.hasNext.value).toBe(true);
+  });
+
+  it("reports prev/next from the clamped position when wrap is off", async () => {
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    expect(list.hasPrev.value).toBe(true);
+    expect(list.hasNext.value).toBe(true);
+    list.next();
+    expect(list.hasNext.value).toBe(false);
+    list.prev();
+    list.prev();
+    expect(list.hasPrev.value).toBe(false);
+  });
+
+  it("a single file never wraps and has no neighbors", async () => {
+    settings.general.wrapAround = true;
+    invokeMock.mockResolvedValue({ items: [scanResult.items[0]], startIndex: 0 });
+    const list = useMediaList();
+    await list.openFile("/f/new.mp4");
+    list.next();
+    list.prev();
+    expect(list.currentIndex.value).toBe(0);
+    expect(list.hasPrev.value).toBe(false);
+    expect(list.hasNext.value).toBe(false);
+  });
+
+  it("removing down to one file leaves no neighbors even with wrap on", async () => {
+    settings.general.wrapAround = true;
+    const list = useMediaList();
+    await list.openFile("/f/mid.jpg");
+    list.removeItem("/f/new.mp4");
+    list.removeItem("/f/old.png");
+    expect(list.items.value).toHaveLength(1);
+    expect(list.hasPrev.value).toBe(false);
+    expect(list.hasNext.value).toBe(false);
+    list.next();
+    expect(list.current.value?.name).toBe("mid.jpg");
   });
 });
 
