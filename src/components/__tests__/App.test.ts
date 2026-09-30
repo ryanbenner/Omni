@@ -69,7 +69,8 @@ vi.mock("../CollageWall.vue", () => ({ __esModule: true, default: WallStub }));
 
 import App from "../../App.vue";
 import Sidebar from "../Sidebar.vue";
-import { message } from "@tauri-apps/plugin-dialog";
+import Viewer from "../Viewer.vue";
+import { ask, message } from "@tauri-apps/plugin-dialog";
 import { emptyDoc } from "../../composables/collageFile";
 import { settings, loadSettings } from "../../composables/settings";
 
@@ -101,6 +102,7 @@ beforeEach(() => {
   singleInstanceHandlers.length = 0;
   destroyMock.mockReset();
   vi.mocked(message).mockReset();
+  vi.mocked(ask).mockReset();
   localStorage.clear();
   loadSettings();
   document.body.innerHTML = "";
@@ -472,6 +474,34 @@ describe("App settings", () => {
     await flushPromises();
     expect(w.find("button[title='Next file']").attributes("disabled")).toBeUndefined();
     expect(w.find("button[title='Previous file']").attributes("disabled")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("deletes the open video without asking when confirmation is off", async () => {
+    settings.general.confirmDelete = false;
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) =>
+      cmd === "delete_file" ? Promise.resolve() : base(cmd, args),
+    );
+    const w = await mountApp();
+    await app(w).openFile("/p/v.mp4");
+    await flushPromises();
+    w.findComponent(Viewer).vm.$emit("deleteFile");
+    await flushPromises();
+    expect(ask).not.toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("delete_file", { path: "/p/v.mp4" });
+    w.unmount();
+  });
+
+  it("still asks first when confirmation is on, and a no keeps the file", async () => {
+    vi.mocked(ask).mockResolvedValue(false);
+    const w = await mountApp();
+    await app(w).openFile("/p/v.mp4");
+    await flushPromises();
+    w.findComponent(Viewer).vm.$emit("deleteFile");
+    await flushPromises();
+    expect(ask).toHaveBeenCalledOnce();
+    expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
     w.unmount();
   });
 });

@@ -238,11 +238,13 @@ function onClipSaved(path: string) {
 async function deleteCurrent() {
   const cur = list.current.value;
   if (!cur) return;
-  const yes = await ask(`Delete ${cur.name}? It will be moved to the Recycle Bin.`, {
-    title: "Delete file",
-    kind: "warning",
-  });
-  if (!yes) return;
+  if (settings.general.confirmDelete) {
+    const yes = await ask(`Delete ${cur.name}? It will be moved to the Recycle Bin.`, {
+      title: "Delete file",
+      kind: "warning",
+    });
+    if (!yes) return;
+  }
   try {
     await invoke("delete_file", { path: cur.path });
     list.removeItem(cur.path);

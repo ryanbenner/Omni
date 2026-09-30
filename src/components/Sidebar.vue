@@ -4,6 +4,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { useFileTree } from "../composables/useFileTree";
+import { settings } from "../composables/settings";
 import { parentDir } from "../composables/pathUtils";
 import { extOf } from "../composables/useImageSave";
 import { filePreview, videoThumbnail } from "../composables/dragPreview";
@@ -308,11 +309,13 @@ async function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
   if (!m) return;
-  const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
-    title: "Delete file",
-    kind: "warning",
-  });
-  if (!yes) return;
+  if (settings.general.confirmDelete) {
+    const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
+      title: "Delete file",
+      kind: "warning",
+    });
+    if (!yes) return;
+  }
   try {
     await invoke("delete_file", { path: m.path });
     await tree.refresh(parentDir(m.path));
