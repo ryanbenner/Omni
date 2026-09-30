@@ -43,6 +43,47 @@ const collageStatus = ref("");
 const collageError = ref<string | null>(null);
 const LAST_COLLAGE_KEY = "mv-last-collage";
 const resumePath = ref<string | null>(null);
+
+const LAST_FILE_KEY = "mv-last-file";
+// a folder to show in the tree at launch when no file is reopened
+const pendingFolder = ref<string | null>(null);
+
+// only pictures and videos reach list.current, so collages are never recorded
+watch(
+  () => list.current.value?.path,
+  (p) => {
+    if (!p) return;
+    pendingFolder.value = null;
+    try {
+      localStorage.setItem(LAST_FILE_KEY, p);
+    } catch {
+      // storage unavailable: nothing to reopen next time
+    }
+  },
+);
+
+async function reopenLast() {
+  const mode = settings.general.reopen;
+  if (mode === "off") return;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(LAST_FILE_KEY);
+  } catch {
+    return;
+  }
+  if (!stored || extOf(stored) === COLLAGE_EXT) return;
+  try {
+    if (mode === "file" && (await exists(stored))) {
+      await list.openFile(stored);
+      return;
+    }
+    // the file is gone or only the folder was asked for: land in the folder
+    const dir = parentDir(stored);
+    if (await exists(dir)) pendingFolder.value = dir;
+  } catch {
+    // fs unavailable: start empty
+  }
+}
 // the sidebar highlights the wall's selected item while the wall is open
 const wallSelected = ref<string | null>(null);
 watch(collageInit, () => (wallSelected.value = null));
@@ -223,6 +264,7 @@ onMounted(async () => {
   } catch {
     // cli plugin unavailable (e.g. dev on mac without args); stay on empty state
   }
+  if (!list.current.value && !collageOpen.value) await reopenLast();
   if (!list.current.value && !collageOpen.value) checkResume();
 });
 
@@ -273,6 +315,8 @@ defineExpose({ openFile, enterCollage });
         :inert="settingsOpen || undefined"
         :current-path="collageOpen ? wallSelected : (list.current.value?.path ?? null)"
         :current-folder="currentFolder"
+        :reveal-folder="pendingFolder"
+        @folder-revealed="pendingFolder = null"
         @open-file="openFile"
         @add-to-collage="onAddToCollage"
         @file-deleted="list.removeItem"

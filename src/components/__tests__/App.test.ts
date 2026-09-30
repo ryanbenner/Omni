@@ -71,6 +71,8 @@ import App from "../../App.vue";
 import Sidebar from "../Sidebar.vue";
 import Viewer from "../Viewer.vue";
 import { ask, message } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
+import { getMatches } from "@tauri-apps/plugin-cli";
 import { emptyDoc } from "../../composables/collageFile";
 import { settings, loadSettings } from "../../composables/settings";
 
@@ -104,6 +106,7 @@ beforeEach(() => {
   vi.mocked(message).mockReset();
   vi.mocked(ask).mockReset();
   localStorage.clear();
+  vi.mocked(exists).mockImplementation(() => Promise.resolve(true));
   loadSettings();
   document.body.innerHTML = "";
 });
@@ -502,6 +505,108 @@ describe("App settings", () => {
     await flushPromises();
     expect(ask).toHaveBeenCalledOnce();
     expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
+    w.unmount();
+  });
+});
+
+describe("App reopen at launch", () => {
+  const readsOf = (path: string) =>
+    invokeMock.mock.calls.filter((c) => c[0] === "read_dir_entries" && c[1]?.path === path).length;
+
+  it("records the last opened picture or video", async () => {
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    expect(localStorage.getItem("mv-last-file")).toBe("/p/a.jpg");
+    w.unmount();
+  });
+
+  it("mode off opens nothing", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    const w = await mountApp();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    expect(readsOf("/p")).toBe(0);
+    expect(w.find(".empty").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("mode file reopens the stored file", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "file";
+    const w = await mountApp();
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: false });
+    expect(w.find(".empty").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("mode file with the file gone falls back to its folder", async () => {
+    localStorage.setItem("mv-last-file", "/p/gone.jpg");
+    settings.general.reopen = "file";
+    vi.mocked(exists).mockImplementation((p) => Promise.resolve(p !== "/p/gone.jpg"));
+    const w = await mountApp();
+    await flushPromises();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    expect(readsOf("/p")).toBeGreaterThan(0);
+    expect(w.find(".empty").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("mode folder reveals the folder and leaves the stage empty", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "folder";
+    const w = await mountApp();
+    await flushPromises();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    expect(readsOf("/p")).toBeGreaterThan(0);
+    expect(w.find(".empty").exists()).toBe(true);
+    w.unmount();
+  });
+
+  it("a stored file whose folder is also gone does nothing", async () => {
+    localStorage.setItem("mv-last-file", "/gone/a.jpg");
+    settings.general.reopen = "file";
+    vi.mocked(exists).mockResolvedValue(false);
+    const w = await mountApp();
+    await flushPromises();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    expect(readsOf("/gone")).toBe(0);
+    expect(w.find(".empty").exists()).toBe(true);
+    expect(w.find(".error-text").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("a stored collage path is ignored", async () => {
+    localStorage.setItem("mv-last-file", "/p/w.collage");
+    settings.general.reopen = "file";
+    const w = await mountApp();
+    await flushPromises();
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    expect(readCollageMock).not.toHaveBeenCalled();
+    expect(readsOf("/p")).toBe(0);
+    w.unmount();
+  });
+
+  it("a file on the command line wins over reopen", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "file";
+    vi.mocked(getMatches).mockResolvedValueOnce({ args: { file: { value: "/p/cli.mp4" } } } as never);
+    const w = await mountApp();
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/cli.mp4", showHidden: false });
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: false });
+    w.unmount();
+  });
+
+  it("a pending folder is revealed when the hidden sidebar is shown later", async () => {
+    localStorage.setItem("mv-last-file", "/p/a.jpg");
+    settings.general.reopen = "folder";
+    settings.general.sidebarAtLaunch = false;
+    const w = await mountApp();
+    await flushPromises();
+    expect(w.findComponent(Sidebar).exists()).toBe(false);
+    expect(readsOf("/p")).toBe(0);
+    await w.find(".tb-sidebar").trigger("click");
+    await flushPromises();
+    expect(readsOf("/p")).toBeGreaterThan(0);
     w.unmount();
   });
 });
