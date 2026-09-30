@@ -4,8 +4,18 @@ import { SPEEDS } from "./videoControls";
 export type ZoomStep = "fine" | "normal" | "coarse";
 export const ZOOM_STEP_NAMES: readonly ZoomStep[] = ["fine", "normal", "coarse"];
 
+export type ReopenMode = "off" | "folder" | "file";
+export const REOPEN_MODES: readonly ReopenMode[] = ["off", "folder", "file"];
+
 export interface Settings {
-  general: { sidebarAtLaunch: boolean; offerResume: boolean };
+  general: {
+    sidebarAtLaunch: boolean;
+    offerResume: boolean;
+    wrapAround: boolean;
+    showHidden: boolean;
+    reopen: ReopenMode;
+    confirmDelete: boolean;
+  };
   video: {
     defaultSpeed: number; // member of SPEEDS
     persistentVolume: boolean;
@@ -19,7 +29,14 @@ export interface Settings {
 
 // every default is the value the code hardcoded before settings existed
 export const DEFAULTS: Settings = {
-  general: { sidebarAtLaunch: true, offerResume: true },
+  general: {
+    sidebarAtLaunch: true,
+    offerResume: true,
+    wrapAround: false,
+    showHidden: false,
+    reopen: "off",
+    confirmDelete: true,
+  },
   video: { defaultSpeed: 1, persistentVolume: false, volume: 1, muted: false, clipCapMb: 50 },
   image: { zoomStep: "normal" },
   collage: { memoryCapGb: 6, jpgQuality: 92 },
@@ -59,6 +76,12 @@ function apply(saved: unknown) {
   const c = section(s, "collage");
   if (isBool(g.sidebarAtLaunch)) settings.general.sidebarAtLaunch = g.sidebarAtLaunch;
   if (isBool(g.offerResume)) settings.general.offerResume = g.offerResume;
+  if (isBool(g.wrapAround)) settings.general.wrapAround = g.wrapAround;
+  if (isBool(g.showHidden)) settings.general.showHidden = g.showHidden;
+  if (typeof g.reopen === "string" && REOPEN_MODES.includes(g.reopen as ReopenMode)) {
+    settings.general.reopen = g.reopen as ReopenMode;
+  }
+  if (isBool(g.confirmDelete)) settings.general.confirmDelete = g.confirmDelete;
   if (typeof v.defaultSpeed === "number" && SPEEDS.includes(v.defaultSpeed)) {
     settings.video.defaultSpeed = v.defaultSpeed;
   }
