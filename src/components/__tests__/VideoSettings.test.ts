@@ -35,6 +35,7 @@ describe("VideoSettings", () => {
 
   it("describes the clip cap in plain app language", () => {
     const w = mount(VideoSettings);
-    expect(w.findAll(".setting-desc").at(-1)!.text()).toBe("Discord clips are encoded to stay under this size.");
+    const descs = w.findAll(".setting-desc");
+    expect(descs[descs.length - 1].text()).toBe("Discord clips are encoded to stay under this size.");
   });
 });
