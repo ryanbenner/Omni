@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onEscape } from "../../composables/dialogStack";
-import { SECTIONS, selectedSection, type SectionId } from "./sections";
 import { dirty, openDraft, applyDraft, revertDraft } from "../../composables/settingsDraft";
+import { SECTIONS, selectedSection, type SectionId } from "./sections";
+import UnsavedSettingsDialog from "./UnsavedSettingsDialog.vue";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -17,11 +18,44 @@ function select(id: SectionId) {
   selectedSection.value = id;
 }
 
+// an exit parked behind the prompt: run after apply or discard, cancel on stay
+const pending = ref<{ run: () => void; cancel?: () => void } | null>(null);
+
+function guard(run: () => void, cancel?: () => void) {
+  if (!dirty.value) {
+    run();
+    return;
+  }
+  // a newer exit replaces an older one still waiting on the prompt
+  pending.value?.cancel?.();
+  pending.value = { run, cancel };
+}
+
+function finishPrompt(outcome: "apply" | "discard" | "stay") {
+  const p = pending.value;
+  pending.value = null;
+  if (!p) return;
+  if (outcome === "stay") {
+    p.cancel?.();
+    return;
+  }
+  if (outcome === "apply") applyDraft();
+  else revertDraft();
+  p.run();
+}
+
+// the gear lives outside the modal; app awaits this before closing
+function requestClose(): Promise<boolean> {
+  return new Promise((resolve) => guard(() => resolve(true), () => resolve(false)));
+}
+
 onMounted(() => {
-  offEscape = onEscape(() => emit("close"));
+  offEscape = onEscape(() => guard(() => emit("close")));
   nav.value?.querySelector<HTMLButtonElement>(".nav-item.active")?.focus();
 });
 onUnmounted(() => offEscape?.());
+
+defineExpose({ requestClose });
 </script>
 
 <template>
@@ -34,7 +68,7 @@ onUnmounted(() => offEscape?.());
         :key="s.id"
         class="nav-item"
         :class="{ active: s.id === selectedSection }"
-        @click="select(s.id)"
+        @click="guard(() => select(s.id))"
       >
         <i class="ph" :class="s.icon" />
         <span>{{ s.label }}</span>
@@ -43,7 +77,7 @@ onUnmounted(() => offEscape?.());
     <div class="settings-page">
       <div class="page-header">
         <span class="page-title">{{ current.label }}</span>
-        <button class="settings-close" title="Close" @click="emit('close')">
+        <button class="settings-close" title="Close" @click="guard(() => emit('close'))">
           <i class="ph ph-x" />
         </button>
       </div>
@@ -55,6 +89,12 @@ onUnmounted(() => offEscape?.());
         <button class="btn-apply" @click="applyDraft">Apply</button>
       </div>
     </div>
+    <UnsavedSettingsDialog
+      v-if="pending"
+      @apply="finishPrompt('apply')"
+      @discard="finishPrompt('discard')"
+      @stay="finishPrompt('stay')"
+    />
   </div>
 </template>
 

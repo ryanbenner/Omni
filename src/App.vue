@@ -12,6 +12,7 @@ import Viewer from "./components/Viewer.vue";
 import Sidebar from "./components/Sidebar.vue";
 import SettingsModal from "./components/settings/SettingsModal.vue";
 import { settings } from "./composables/settings";
+import { dirty as settingsDirty } from "./composables/settingsDraft";
 import { useMediaList } from "./composables/useMediaList";
 import { useKeyboard } from "./composables/useKeyboard";
 import { parentDir } from "./composables/pathUtils";
@@ -28,6 +29,17 @@ const viewer = ref<InstanceType<typeof Viewer> | null>(null);
 const sidebar = ref<InstanceType<typeof Sidebar> | null>(null);
 const sidebarOpen = ref(settings.general.sidebarAtLaunch);
 const settingsOpen = ref(false);
+const settingsModal = ref<InstanceType<typeof SettingsModal> | null>(null);
+
+// closing through the gear asks about pending edits; the modal answers false on stay
+async function toggleSettings() {
+  if (!settingsOpen.value) {
+    settingsOpen.value = true;
+    return;
+  }
+  const ok = await (settingsModal.value?.requestClose() ?? Promise.resolve(true));
+  if (ok) settingsOpen.value = false;
+}
 
 interface WallHandle {
   addPaths(paths: string[]): Promise<void>;
@@ -259,9 +271,14 @@ function pathFromArgv(argv: string[]): string | null {
 onMounted(async () => {
   window.addEventListener("focus", () => list.resync());
   getCurrentWindow().onCloseRequested(async (e) => {
-    if (!wall.value?.isDirty()) return;
+    // pending settings edits ask first; the collage's own unsaved check follows
+    const pendingEdits = settingsOpen.value && settingsDirty.value;
+    if (!pendingEdits && !wall.value?.isDirty()) return;
     e.preventDefault();
-    if (await askWallToLeave(true)) await getCurrentWindow().destroy();
+    if (pendingEdits && !(await settingsModal.value!.requestClose())) return;
+    settingsOpen.value = false;
+    if (wall.value?.isDirty() && !(await askWallToLeave(true))) return;
+    await getCurrentWindow().destroy();
   });
   await listen<string[]>("single-instance", (e) => {
     const path = pathFromArgv(e.payload);
@@ -321,7 +338,7 @@ defineExpose({ openFile, enterCollage });
       :settings-open="settingsOpen"
       :subtitle="collageOpen ? collageStatus : undefined"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
-      @toggle-settings="settingsOpen = !settingsOpen"
+      @toggle-settings="toggleSettings"
     />
     <div class="body-row">
       <Sidebar
@@ -374,7 +391,7 @@ defineExpose({ openFile, enterCollage });
           </button>
         </div>
       </div>
-      <SettingsModal v-if="settingsOpen" @close="settingsOpen = false" />
+      <SettingsModal v-if="settingsOpen" ref="settingsModal" @close="settingsOpen = false" />
     </div>
   </main>
 </template>
