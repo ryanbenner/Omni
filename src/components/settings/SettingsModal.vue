@@ -57,7 +57,12 @@ onMounted(() => {
   });
   nav.value?.querySelector<HTMLButtonElement>(".nav-item.active")?.focus();
 });
-onUnmounted(() => offEscape?.());
+onUnmounted(() => {
+  offEscape?.();
+  // settings closed from outside while the prompt was up: the parked exit is off
+  pending.value?.cancel?.();
+  pending.value = null;
+});
 
 defineExpose({ requestClose });
 </script>
@@ -65,7 +70,7 @@ defineExpose({ requestClose });
 <template>
   <!-- the native menu's reload entry would drop an unsaved wall underneath -->
   <div class="settings" role="dialog" aria-label="Settings" @contextmenu.prevent>
-    <nav ref="nav" class="settings-nav">
+    <nav ref="nav" class="settings-nav" :inert="pending ? true : undefined">
       <div class="nav-caption">Settings</div>
       <button
         v-for="s in SECTIONS"
@@ -78,7 +83,7 @@ defineExpose({ requestClose });
         <span>{{ s.label }}</span>
       </button>
     </nav>
-    <div class="settings-page">
+    <div class="settings-page" :inert="pending ? true : undefined">
       <div class="page-header">
         <span class="page-title">{{ current.label }}</span>
         <button class="settings-close" title="Close" @click="guard(() => emit('close'))">

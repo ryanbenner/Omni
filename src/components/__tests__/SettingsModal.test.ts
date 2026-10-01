@@ -226,4 +226,26 @@ describe("SettingsModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     w.unmount();
   });
+
+  it("the nav and page go inert while the prompt is up", async () => {
+    const w = mount(SettingsModal, { attachTo: document.body });
+    await w.findAll("[role=switch]")[2].trigger("click");
+    expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
+    await w.findAll(".nav-item")[1].trigger("click");
+    expect(w.find(".settings-nav").attributes("inert")).toBeDefined();
+    expect(w.find(".settings-page").attributes("inert")).toBeDefined();
+    await w.find(".dialog-x").trigger("click");
+    expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("unmounting mid-prompt settles a waiting requestClose as false", async () => {
+    const w = mount(SettingsModal, { attachTo: document.body });
+    const vm = w.vm as unknown as { requestClose: () => Promise<boolean> };
+    await w.findAll("[role=switch]")[2].trigger("click");
+    const waiting = vm.requestClose();
+    await nextTick();
+    w.unmount();
+    await expect(waiting).resolves.toBe(false);
+  });
 });
