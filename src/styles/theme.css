@@ -176,6 +176,31 @@ input[type="range"] {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+/* corner close for in-app dialogs */
+.dialog-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-neutral-600);
+  cursor: pointer;
+  font-size: 15px;
+}
+.dialog-x:hover {
+  background: var(--color-neutral-900);
+  color: var(--color-text);
+}
+.dialog-x:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .dialog-cancel {
   display: block;
   margin: 12px 0 0 auto;
