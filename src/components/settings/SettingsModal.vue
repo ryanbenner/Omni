@@ -2,8 +2,12 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onEscape } from "../../composables/dialogStack";
 import { SECTIONS, selectedSection, type SectionId } from "./sections";
+import { dirty, openDraft, applyDraft, revertDraft } from "../../composables/settingsDraft";
 
 const emit = defineEmits<{ close: [] }>();
+
+// before the pages render, so they never show a stale draft
+openDraft();
 
 const nav = ref<HTMLElement | null>(null);
 const current = computed(() => SECTIONS.find((s) => s.id === selectedSection.value) ?? SECTIONS[0]);
@@ -45,6 +49,10 @@ onUnmounted(() => offEscape?.());
       </div>
       <div class="page-body">
         <component :is="current.page" />
+      </div>
+      <div v-if="dirty" class="page-footer">
+        <button class="btn-revert" @click="revertDraft">Revert</button>
+        <button class="btn-apply" @click="applyDraft">Apply</button>
       </div>
     </div>
   </div>
@@ -160,5 +168,18 @@ onUnmounted(() => offEscape?.());
 .page-body > :deep(.setting-row),
 .page-body > :deep(.placeholder) {
   max-width: 640px;
+}
+.page-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 28px;
+  border-top: 1px solid var(--color-neutral-900);
+}
+.page-footer .btn-apply,
+.page-footer .btn-revert {
+  width: 96px;
+  padding: 0;
 }
 </style>

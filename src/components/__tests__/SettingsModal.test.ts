@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import SettingsModal from "../settings/SettingsModal.vue";
 import { selectedSection } from "../settings/sections";
-import { loadSettings } from "../../composables/settings";
+import { settings, loadSettings } from "../../composables/settings";
+import { openDraft } from "../../composables/settingsDraft";
 
 describe("SettingsModal", () => {
   beforeEach(() => {
     localStorage.clear();
     loadSettings();
+    openDraft();
     selectedSection.value = "general";
     document.body.innerHTML = "";
   });
@@ -73,5 +75,45 @@ describe("SettingsModal", () => {
     w.find(".page-body").element.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
     w.unmount();
+  });
+
+  it("the footer appears only once something changed, and Apply writes the store", async () => {
+    const w = mount(SettingsModal);
+    expect(w.find(".page-footer").exists()).toBe(false);
+    await w.findAll("[role=switch]")[2].trigger("click"); // wrap around
+    expect(w.find(".page-footer").exists()).toBe(true);
+    expect(w.findAll(".page-footer button").map((b) => b.text())).toEqual(["Revert", "Apply"]);
+    expect(settings.general.wrapAround).toBe(false);
+    await w.find(".page-footer .btn-apply").trigger("click");
+    expect(settings.general.wrapAround).toBe(true);
+    expect(w.find(".page-footer").exists()).toBe(false);
+  });
+
+  it("Revert restores the draft and hides the footer", async () => {
+    const w = mount(SettingsModal);
+    await w.findAll("[role=switch]")[2].trigger("click");
+    await w.find(".page-footer .btn-revert").trigger("click");
+    expect(w.findAll("[role=switch]")[2].attributes("aria-checked")).toBe("false");
+    expect(w.find(".page-footer").exists()).toBe(false);
+    expect(settings.general.wrapAround).toBe(false);
+  });
+
+  it("a reopened modal shows the applied values and no footer", async () => {
+    const w = mount(SettingsModal);
+    await w.findAll("[role=switch]")[2].trigger("click");
+    await w.find(".page-footer .btn-apply").trigger("click");
+    w.unmount();
+    const again = mount(SettingsModal);
+    expect(again.findAll("[role=switch]")[2].attributes("aria-checked")).toBe("true");
+    expect(again.find(".page-footer").exists()).toBe(false);
+  });
+
+  it("a stale draft from a previous open is replaced when the modal opens", async () => {
+    const w = mount(SettingsModal);
+    await w.findAll("[role=switch]")[2].trigger("click");
+    w.unmount(); // closed without apply or revert
+    const again = mount(SettingsModal);
+    expect(again.findAll("[role=switch]")[2].attributes("aria-checked")).toBe("false");
+    expect(again.find(".page-footer").exists()).toBe(false);
   });
 });
