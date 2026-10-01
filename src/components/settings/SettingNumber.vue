@@ -24,7 +24,7 @@ function commit() {
   model.value = v;
   draft.value = String(v);
 }
-// escape closes the modal without a blur; keep what was typed
+// a field unmounted without a blur still commits what was typed
 onBeforeUnmount(commit);
 </script>
 

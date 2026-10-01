@@ -50,7 +50,11 @@ function requestClose(): Promise<boolean> {
 }
 
 onMounted(() => {
-  offEscape = onEscape(() => guard(() => emit("close")));
+  offEscape = onEscape(() => {
+    // a typed number commits on blur; escape must see it before deciding to close
+    (document.activeElement as HTMLElement | null)?.blur();
+    guard(() => emit("close"));
+  });
   nav.value?.querySelector<HTMLButtonElement>(".nav-item.active")?.focus();
 });
 onUnmounted(() => offEscape?.());

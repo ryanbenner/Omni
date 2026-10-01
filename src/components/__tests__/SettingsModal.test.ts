@@ -208,4 +208,22 @@ describe("SettingsModal", () => {
     await expect(second).resolves.toBe(true);
     w.unmount();
   });
+
+  it("escape with a typed, uncommitted number prompts instead of dropping it", async () => {
+    const onClose = vi.fn();
+    const w = mount(SettingsModal, { attachTo: document.body, props: { onClose } });
+    await w.findAll(".nav-item")[1].trigger("click"); // video player
+    const input = w.find("input.number");
+    (input.element as HTMLInputElement).focus();
+    (input.element as HTMLInputElement).value = "25";
+    await input.trigger("input");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await nextTick();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(w.find(".dialog").exists()).toBe(true);
+    await w.find(".dialog .btn-apply").trigger("click");
+    expect(settings.video.clipCapMb).toBe(25);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    w.unmount();
+  });
 });
