@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import UnsavedSettingsDialog from "../settings/UnsavedSettingsDialog.vue";
+import { onEscape } from "../../composables/dialogStack";
 
 describe("UnsavedSettingsDialog", () => {
   beforeEach(() => {
@@ -31,9 +32,15 @@ describe("UnsavedSettingsDialog", () => {
   });
 
   it("releases its Escape handler on unmount", () => {
+    const sentinel = vi.fn();
+    const off = onEscape(sentinel);
     const w = mount(UnsavedSettingsDialog, { attachTo: document.body });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(sentinel).not.toHaveBeenCalled();
+    expect(w.emitted("stay")).toHaveLength(1);
     w.unmount();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    expect(w.emitted("stay") ?? []).toHaveLength(0);
+    expect(sentinel).toHaveBeenCalledTimes(1);
+    off();
   });
 });
