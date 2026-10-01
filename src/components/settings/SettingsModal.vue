@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onEscape } from "../../composables/dialogStack";
+import { dirty, openDraft, applyDraft, revertDraft } from "../../composables/settingsDraft";
 import { SECTIONS, selectedSection, type SectionId } from "./sections";
+import UnsavedSettingsDialog from "./UnsavedSettingsDialog.vue";
 
 const emit = defineEmits<{ close: [] }>();
+
+// before the pages render, so they never show a stale draft
+openDraft();
 
 const nav = ref<HTMLElement | null>(null);
 const current = computed(() => SECTIONS.find((s) => s.id === selectedSection.value) ?? SECTIONS[0]);
@@ -13,40 +18,92 @@ function select(id: SectionId) {
   selectedSection.value = id;
 }
 
+// an exit parked behind the prompt: run after apply or discard, cancel on stay
+const pending = ref<{ run: () => void; cancel?: () => void } | null>(null);
+
+function guard(run: () => void, cancel?: () => void) {
+  if (!dirty.value) {
+    run();
+    return;
+  }
+  // a newer exit replaces an older one still waiting on the prompt
+  pending.value?.cancel?.();
+  pending.value = { run, cancel };
+}
+
+function finishPrompt(outcome: "apply" | "discard" | "stay") {
+  const p = pending.value;
+  pending.value = null;
+  if (!p) return;
+  if (outcome === "stay") {
+    p.cancel?.();
+    return;
+  }
+  if (outcome === "apply") applyDraft();
+  else revertDraft();
+  p.run();
+}
+
+// the gear lives outside the modal; app awaits this before closing
+function requestClose(): Promise<boolean> {
+  return new Promise((resolve) => guard(() => resolve(true), () => resolve(false)));
+}
+
 onMounted(() => {
-  offEscape = onEscape(() => emit("close"));
+  offEscape = onEscape(() => {
+    // a typed number commits on blur; escape must see it before deciding to close
+    (document.activeElement as HTMLElement | null)?.blur();
+    guard(() => emit("close"));
+  });
   nav.value?.querySelector<HTMLButtonElement>(".nav-item.active")?.focus();
 });
-onUnmounted(() => offEscape?.());
+onUnmounted(() => {
+  offEscape?.();
+  // settings closed from outside while the prompt was up: the parked exit is off
+  pending.value?.cancel?.();
+  pending.value = null;
+});
+
+defineExpose({ requestClose });
 </script>
 
 <template>
   <!-- the native menu's reload entry would drop an unsaved wall underneath -->
   <div class="settings" role="dialog" aria-label="Settings" @contextmenu.prevent>
-    <nav ref="nav" class="settings-nav">
+    <nav ref="nav" class="settings-nav" :inert="pending ? true : undefined">
       <div class="nav-caption">Settings</div>
       <button
         v-for="s in SECTIONS"
         :key="s.id"
         class="nav-item"
         :class="{ active: s.id === selectedSection }"
-        @click="select(s.id)"
+        @click="guard(() => select(s.id))"
       >
         <i class="ph" :class="s.icon" />
         <span>{{ s.label }}</span>
       </button>
     </nav>
-    <div class="settings-page">
+    <div class="settings-page" :inert="pending ? true : undefined">
       <div class="page-header">
         <span class="page-title">{{ current.label }}</span>
-        <button class="settings-close" title="Close" @click="emit('close')">
+        <button class="settings-close" title="Close" @click="guard(() => emit('close'))">
           <i class="ph ph-x" />
         </button>
       </div>
       <div class="page-body">
         <component :is="current.page" />
       </div>
+      <div v-if="dirty" class="page-footer">
+        <button class="btn-revert" @click="revertDraft">Revert</button>
+        <button class="btn-apply" @click="applyDraft">Apply</button>
+      </div>
     </div>
+    <UnsavedSettingsDialog
+      v-if="pending"
+      @apply="finishPrompt('apply')"
+      @discard="finishPrompt('discard')"
+      @stay="finishPrompt('stay')"
+    />
   </div>
 </template>
 
@@ -160,5 +217,18 @@ onUnmounted(() => offEscape?.());
 .page-body > :deep(.setting-row),
 .page-body > :deep(.placeholder) {
   max-width: 640px;
+}
+.page-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 28px;
+  border-top: 1px solid var(--color-neutral-900);
+}
+.page-footer .btn-apply,
+.page-footer .btn-revert {
+  width: 96px;
+  padding: 0;
 }
 </style>

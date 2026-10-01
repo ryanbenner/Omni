@@ -330,6 +330,7 @@ defineExpose({ handleAction });
 .pill-btn {
   width: 32px;
   height: 32px;
+  padding: 0;
   display: grid;
   place-items: center;
   border: none;
@@ -338,6 +339,10 @@ defineExpose({ handleAction });
   color: var(--color-neutral-400);
   cursor: pointer;
   font-size: 16px;
+}
+.pill-btn i {
+  display: block;
+  line-height: 1;
 }
 .pill-btn:hover {
   background: var(--color-accent-900);

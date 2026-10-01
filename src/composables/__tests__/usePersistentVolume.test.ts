@@ -68,6 +68,16 @@ describe("usePersistentVolume", () => {
     p.stop();
   });
 
+  it("a volume applied together with turning the toggle on wins over the player's current volume", async () => {
+    const p = player(0.7, false);
+    settings.video.persistentVolume = true;
+    settings.video.volume = 0.4;
+    await nextTick();
+    expect(p.volume.value).toBe(0.4);
+    expect(settings.video.volume).toBe(0.4);
+    p.stop();
+  });
+
   it("flipping the toggle off stops the mirroring", async () => {
     settings.video.persistentVolume = true;
     const p = player();

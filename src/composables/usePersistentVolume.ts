@@ -17,22 +17,19 @@ export function usePersistentVolume(volume: Ref<number>, muted: Ref<boolean>) {
     settings.video.muted = m;
   });
 
+  // store -> player while on. turning the setting on normally captures what the
+  // player is doing, but a volume applied in the same flush (settings apply) wins
   watch(
-    () => [settings.video.volume, settings.video.muted] as const,
-    ([v, m]) => {
-      if (!on()) return;
+    () => [settings.video.persistentVolume, settings.video.volume, settings.video.muted] as const,
+    ([on, v, m], [wasOn, prevV, prevM]) => {
+      if (!on) return;
+      if (!wasOn && v === prevV && m === prevM) {
+        settings.video.volume = volume.value;
+        settings.video.muted = muted.value;
+        return;
+      }
       volume.value = v;
       muted.value = m;
-    },
-  );
-
-  // turning it on captures what the user is hearing, not a stale stored value
-  watch(
-    () => settings.video.persistentVolume,
-    (now) => {
-      if (!now) return;
-      settings.video.volume = volume.value;
-      settings.video.muted = muted.value;
     },
   );
 }

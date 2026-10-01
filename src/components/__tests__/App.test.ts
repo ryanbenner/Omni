@@ -507,6 +507,107 @@ describe("App settings", () => {
     expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
     w.unmount();
   });
+  it("the gear asks before closing over pending edits and closes after Exit without saving", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    await w.find(".tb-gear").trigger("click");
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(true);
+    expect(w.find(".dialog").exists()).toBe(true);
+    await w.find(".dialog-x").trigger("click");
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(true);
+    expect(w.find(".dialog").exists()).toBe(false);
+    await w.find(".tb-gear").trigger("click");
+    await flushPromises();
+    await w.find(".dialog .btn-revert").trigger("click");
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(settings.general.wrapAround).toBe(false);
+    w.unmount();
+  });
+
+  it("the gear applies and closes when the prompt's Apply is chosen", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    await w.find(".tb-gear").trigger("click");
+    await flushPromises();
+    await w.find(".dialog .btn-apply").trigger("click");
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(settings.general.wrapAround).toBe(true);
+    w.unmount();
+  });
+
+  it("a window close with pending edits prompts; stay keeps the window, apply closes both", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    const prevent = vi.fn();
+    const first = closeHandlers[0]({ preventDefault: prevent });
+    await flushPromises();
+    expect(prevent).toHaveBeenCalled();
+    expect(w.find(".dialog").exists()).toBe(true);
+    await w.find(".dialog-x").trigger("click");
+    await first;
+    expect(destroyMock).not.toHaveBeenCalled();
+    expect(w.find(".settings").exists()).toBe(true);
+    const second = closeHandlers[0]({ preventDefault: vi.fn() });
+    await flushPromises();
+    await w.find(".dialog .btn-apply").trigger("click");
+    await second;
+    expect(settings.general.wrapAround).toBe(true);
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(destroyMock).toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("a window close with pending edits and a dirty wall asks about settings first, then the wall", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    wallSpies.dirty = true;
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    wallSpies.requestLeave.mockResolvedValue(false);
+    const close = closeHandlers[0]({ preventDefault: vi.fn() });
+    await flushPromises();
+    expect(wallSpies.requestLeave).not.toHaveBeenCalled();
+    await w.find(".dialog .btn-revert").trigger("click");
+    await close;
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(true);
+    expect(destroyMock).not.toHaveBeenCalled();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(settings.general.wrapAround).toBe(false);
+    w.unmount();
+  });
+
+  it("a window close with settings open but clean lets the close through", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    const prevent = vi.fn();
+    await closeHandlers[0]({ preventDefault: prevent });
+    expect(prevent).not.toHaveBeenCalled();
+    expect(destroyMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("settings reopen clean after a second-instance close dropped pending edits", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(false);
+    expect(w.find(".dialog").exists()).toBe(false);
+    expect(settings.general.wrapAround).toBe(false);
+    await w.find(".tb-gear").trigger("click");
+    expect(w.find(".page-footer").exists()).toBe(false);
+    expect(w.findAll("[role=switch]")[2].attributes("aria-checked")).toBe("false");
+    w.unmount();
+  });
 });
 
 describe("App reopen at launch", () => {

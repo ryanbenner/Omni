@@ -59,6 +59,7 @@ const win = getCurrentWindow();
 .tb-icon {
   width: 22px;
   height: 22px;
+  padding: 0;
   display: grid;
   place-items: center;
   border: none;
@@ -67,6 +68,10 @@ const win = getCurrentWindow();
   color: var(--color-neutral-400);
   cursor: pointer;
   font-size: 15px;
+}
+.tb-icon i {
+  display: block;
+  line-height: 1;
 }
 .tb-icon:hover,
 .tb-icon.active {
