@@ -31,19 +31,20 @@ tree.init().then(() => {
 
 const root = ref<HTMLElement | null>(null);
 
-// the first reveal after mounting (launch, or the tree shown mid-session) lands
-// the file in the middle; stepping through a folder afterwards moves the minimum
-let firstReveal = true;
+// a tree that appears with a file already open (launch, or shown mid-session)
+// lands that file in the middle; any file opened afterwards moves the tree the
+// minimum, which is not at all when its row is already in view
+let initial = true;
 
 watch(
   () => props.currentPath,
   async (p) => {
+    const block = initial ? "center" : "nearest";
+    initial = false;
     tree.setCurrent(p);
     if (p) {
       await tree.reveal(p);
       await nextTick();
-      const block = firstReveal ? "center" : "nearest";
-      firstReveal = false;
       root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block });
     }
   },
@@ -127,7 +128,12 @@ async function fitCrumbs() {
   hiddenMid.value = 0;
   await nextTick();
   const el = crumbs.value;
-  while (el && el.scrollWidth > el.clientWidth && hiddenMid.value < stack.value.length - 2) {
+  // middle folders fold first; only then does the last name get cut short
+  const tight = () => {
+    const last = el?.querySelector<HTMLElement>(".crumb.last");
+    return !!el && (el.scrollWidth > el.clientWidth || (!!last && last.scrollWidth > last.clientWidth));
+  };
+  while (tight() && hiddenMid.value < stack.value.length - 2) {
     hiddenMid.value++;
     await nextTick();
   }
@@ -775,6 +781,11 @@ async function deleteFile(path: string) {
   cursor: pointer;
 }
 .crumb.last {
+  /* the only segment allowed to give way: it shortens with an ellipsis */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--color-neutral-200);
 }
 .crumb:hover {

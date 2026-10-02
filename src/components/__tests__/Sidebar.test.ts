@@ -415,6 +415,56 @@ describe("Sidebar reveal folder", () => {
     w.unmount();
   });
 
+  it("a file opened after mounting scrolls the minimum, so a visible row stays put", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    await w.setProps({ currentPath: "C:\\Pics\\a.jpg", currentFolder: "C:\\Pics" });
+    await flushPromises();
+    expect(w.find(".tree-row.selected").attributes("title")).toBe("a.jpg");
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalledWith({ block: "center" });
+    w.unmount();
+  });
+
+  it("a long last folder name folds the middle before it is cut short", async () => {
+    // jsdom has no layout: the row never overflows, the last name reports
+    // being cut only while the middle folders still show
+    const sw = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth")!;
+    const cw = Object.getOwnPropertyDescriptor(Element.prototype, "clientWidth")!;
+    Object.defineProperty(Element.prototype, "clientWidth", {
+      get() { return (this as Element).classList.contains("last") ? 40 : 200; },
+      configurable: true,
+    });
+    Object.defineProperty(Element.prototype, "scrollWidth", {
+      get() {
+        const el = this as Element;
+        if (el.classList.contains("last")) return el.parentElement?.querySelector(".crumb-more") ? 40 : 90;
+        return el.classList.contains("crumbs") ? 200 : 0;
+      },
+      configurable: true,
+    });
+    try {
+      const w = mount(Sidebar, {
+        props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+        attachTo: document.body,
+      });
+      await flushPromises();
+      scrolledBy(w, 60);
+      await w.find(".scroll").trigger("scroll");
+      await flushPromises();
+      expect(stackNames(w)).toEqual(["C:", "Sub"]);
+      expect(w.find(".crumb-more").exists()).toBe(true);
+      w.unmount();
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollWidth", sw);
+      Object.defineProperty(Element.prototype, "clientWidth", cw);
+    }
+  });
+
   it("the first file reveal centers the file; later ones scroll the minimum", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: "C:\\Pics\\b.jpg", currentFolder: "C:\\Pics" },
