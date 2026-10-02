@@ -480,6 +480,75 @@ describe("App settings", () => {
     w.unmount();
   });
 
+  it("deletes the open video when the player confirms, without a native dialog", async () => {
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) =>
+      cmd === "delete_file" ? Promise.resolve() : base(cmd, args),
+    );
+    const w = await mountApp();
+    await app(w).openFile("/p/v.mp4");
+    await flushPromises();
+    w.findComponent(Viewer).vm.$emit("deleteFile");
+    await flushPromises();
+    expect(ask).not.toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("delete_file", { path: "/p/v.mp4" });
+    w.unmount();
+  });
+
+  it("starts with the file tree hidden when the setting says so", async () => {
+    localStorage.setItem("mv-settings", JSON.stringify({ general: { sidebarAtLaunch: false } }));
+    loadSettings();
+    const w = await mountApp();
+    expect(w.find(".sidebar").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("hides the resume offer live when the setting is off", async () => {
+    localStorage.setItem("mv-last-collage", "/p/weekend.collage");
+    const w = await mountApp();
+    expect(w.find(".resume-btn").exists()).toBe(true);
+    settings.general.offerResume = false;
+    await flushPromises();
+    expect(w.find(".resume-btn").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("flipping show hidden files re-reads the media list's folder", async () => {
+    const w = await mountApp();
+    await app(w).openFile("/p/a.jpg");
+    await flushPromises();
+    invokeMock.mockClear();
+    settings.general.showHidden = true;
+    await flushPromises();
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/a.jpg", showHidden: true });
+    w.unmount();
+  });
+
+  it("with wrap on, the viewer's arrows stay enabled at the ends", async () => {
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === "scan_media") {
+        return Promise.resolve({
+          items: [
+            { path: "/p/a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 },
+            { path: "/p/b.jpg", kind: "image", name: "b.jpg", mtime: 1, size: 0 },
+          ],
+          startIndex: 1,
+        });
+      }
+      return base(cmd, args);
+    });
+    const w = await mountApp();
+    await app(w).openFile("/p/b.jpg");
+    await flushPromises();
+    expect(w.find("button[title='Next file']").attributes("disabled")).toBeDefined();
+    settings.general.wrapAround = true;
+    await flushPromises();
+    expect(w.find("button[title='Next file']").attributes("disabled")).toBeUndefined();
+    expect(w.find("button[title='Previous file']").attributes("disabled")).toBeUndefined();
+    w.unmount();
+  });
+
   it("deletes the open video without asking when confirmation is off", async () => {
     settings.general.confirmDelete = false;
     const base = invokeMock.getMockImplementation()!;
@@ -496,18 +565,7 @@ describe("App settings", () => {
     w.unmount();
   });
 
-  it("still asks first when confirmation is on, and a no keeps the file", async () => {
-    vi.mocked(ask).mockResolvedValue(false);
-    const w = await mountApp();
-    await app(w).openFile("/p/v.mp4");
-    await flushPromises();
-    w.findComponent(Viewer).vm.$emit("deleteFile");
-    await flushPromises();
-    expect(ask).toHaveBeenCalledOnce();
-    expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
-    w.unmount();
-  });
-  it("the gear asks before closing over pending edits and closes after Exit without saving", async () => {
+  it("the gear asks before closing over pending edits and closes after Don't Save", async () => {
     const w = await mountApp();
     await w.find(".tb-gear").trigger("click");
     await w.findAll("[role=switch]")[2].trigger("click");

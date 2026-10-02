@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getMatches } from "@tauri-apps/plugin-cli";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask, message } from "@tauri-apps/plugin-dialog";
+import { message } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { exists } from "@tauri-apps/plugin-fs";
 import Titlebar from "./components/Titlebar.vue";
@@ -309,16 +309,10 @@ function onClipSaved(path: string) {
   sidebar.value?.refreshDir(parentDir(path));
 }
 
+// the player confirms beside its trash icon; by the time this runs the user said yes
 async function deleteCurrent() {
   const cur = list.current.value;
   if (!cur) return;
-  if (settings.general.confirmDelete) {
-    const yes = await ask(`Delete ${cur.name}? It will be moved to the Recycle Bin.`, {
-      title: "Delete file",
-      kind: "warning",
-    });
-    if (!yes) return;
-  }
   try {
     await invoke("delete_file", { path: cur.path });
     list.removeItem(cur.path);
