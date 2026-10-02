@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { DirListing, MediaItem, ViewerAction } from "../types";
 import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
@@ -19,7 +19,7 @@ import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
 import { usePersistentVolume } from "../composables/usePersistentVolume";
 
-const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
+const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean; showName?: boolean }>();
 const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
 
 function navClick(dir: -1 | 1, e: MouseEvent) {
@@ -209,6 +209,26 @@ function runExport(o: { input: string; output: string; mode: ExportRequest["mode
 
 const container = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
+const wrap = ref<HTMLElement | null>(null);
+
+// the file name sits in the letterbox band above the picture, so it needs the
+// band's height: the wrap size against the video's natural aspect
+const natural = ref({ w: 0, h: 0 });
+const wrapSize = ref({ w: 0, h: 0 });
+const NAME_BAND_MIN = 24;
+let wrapObserver: ResizeObserver | null = null;
+function measureWrap() {
+  const r = wrap.value?.getBoundingClientRect();
+  if (r) wrapSize.value = { w: r.width, h: r.height };
+}
+const topGap = computed(() => {
+  const { w, h } = wrapSize.value;
+  const n = natural.value;
+  if (!w || !h || !n.w || !n.h) return 0;
+  const rendered = Math.min(h, (w * n.h) / n.w);
+  return (h - rendered) / 2;
+});
+const showName = computed(() => props.showName === true && topGap.value >= NAME_BAND_MIN);
 const src = computed(() => convertFileSrc(props.item.path));
 
 const playing = ref(false);
@@ -398,7 +418,17 @@ function hideControls() {
   controlsVisible.value = false;
 }
 
+onMounted(() => {
+  measureWrap();
+  // jsdom has no ResizeObserver; the mount measurement covers tests
+  if (typeof ResizeObserver !== "undefined" && wrap.value) {
+    wrapObserver = new ResizeObserver(measureWrap);
+    wrapObserver.observe(wrap.value);
+  }
+});
+
 onUnmounted(() => {
+  wrapObserver?.disconnect();
   stopRevLoop();
   clearTimeout(holdTimer);
   clearTimeout(hideTimer);
@@ -424,6 +454,8 @@ watch(src, () => {
 function onLoadedMetadata() {
   const el = video.value;
   if (!el) return;
+  natural.value = { w: el.videoWidth, h: el.videoHeight };
+  measureWrap();
   duration.value = el.duration;
   el.playbackRate = speed.value;
   el.volume = volume.value;
@@ -575,7 +607,8 @@ const progress = computed(() =>
         this viewer yet.
       </p>
     </div>
-    <div v-else class="video-wrap">
+    <div v-else ref="wrap" class="video-wrap">
+      <div v-if="showName" class="file-name">{{ item.name }}</div>
       <video
         ref="video"
         :src="src"
@@ -767,6 +800,19 @@ const progress = computed(() =>
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.file-name {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 5;
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--color-neutral-300);
+  pointer-events: none;
 }
 .badge-layer {
   position: absolute;

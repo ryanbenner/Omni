@@ -4,7 +4,7 @@ import type { MediaItem, ViewerAction } from "../types";
 import VideoPlayer from "./VideoPlayer.vue";
 import ImageViewer from "./ImageViewer.vue";
 
-defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
+defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean; showName?: boolean }>();
 defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1]; collage: [] }>();
 
 const child = ref<{ handleAction: (a: ViewerAction) => boolean } | null>(null);
@@ -23,6 +23,7 @@ defineExpose({ handleAction });
     :item="item"
     :has-prev="hasPrev"
     :has-next="hasNext"
+    :show-name="showName"
     @delete-file="$emit('deleteFile')"
     @clip-saved="$emit('clipSaved', $event)"
     @navigate="$emit('navigate', $event)"
