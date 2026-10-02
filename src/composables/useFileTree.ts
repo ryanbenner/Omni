@@ -176,11 +176,19 @@ export function useFileTree(openFile: (path: string) => void) {
   }
 
   // a pin is a clean workspace: everything else closes, then the chain from
-  // the drive down to the pinned folder opens so its parents can be held
-  async function pinClick(pin: Pin) {
+  // the drive down to the pinned folder opens so its parents can stack.
+  // clicking the pin that is already open closes the whole tree instead.
+  // returns whether the pin ended up open
+  async function pinClick(pin: Pin): Promise<boolean> {
+    const wasOpen = node(pin.path).open;
     collapseAll();
+    if (wasOpen) {
+      version.value++;
+      return false;
+    }
     await revealDir(pin.path);
     refreshPinCount(pin.path);
+    return true;
   }
 
   // re-read a directory after something inside it changed

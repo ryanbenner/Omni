@@ -303,6 +303,56 @@ describe("Sidebar delete", () => {
   });
 });
 
+describe("Sidebar pin list scrolling", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    wire();
+    Element.prototype.scrollBy = vi.fn();
+  });
+
+  it("pinning a folder scrolls the list to the bottom", async () => {
+    const w = await mountWithPins();
+    const list = w.find(".pins-list").element as HTMLElement;
+    const set = vi.fn();
+    Object.defineProperty(list, "scrollHeight", { value: 300, configurable: true });
+    Object.defineProperty(list, "scrollTop", { get: () => 0, set, configurable: true });
+    await w.find(".tree-row").trigger("click"); // expand C:
+    await flushPromises();
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 }); // A, already pinned
+    expect(w.findAll(".menu-item").find((m) => m.text() === "Unpin folder")).toBeDefined();
+    await w.findAll(".menu-item").find((m) => m.text() === "Unpin folder")!.trigger("click");
+    expect(set).not.toHaveBeenCalled();
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 }); // pin A again
+    await w.findAll(".menu-item").find((m) => m.text() === "Pin folder")!.trigger("click");
+    await flushPromises();
+    expect(names(w)).toEqual(["B", "C", "A"]);
+    expect(set).toHaveBeenCalledWith(300);
+    w.unmount();
+  });
+
+  it("the drop slot follows the pointer when the list scrolls under a held pin", async () => {
+    const w = await mountWithPins();
+    const rows = w.findAll(".pin-row");
+    await fire(w, rows[0].element, "pointerdown", { button: 0, clientY: 13 });
+    await fire(w, rows[0].element, "pointermove", { clientY: 45 });
+    expect(w.findAll(".pin-row")[1].element.previousElementSibling?.classList.contains("drop-bar")).toBe(false);
+    // the list scrolled up by one row: the same pointer now sits over C
+    w.findAll(".pin-row").forEach((r, i) => {
+      (r.element as HTMLElement).getBoundingClientRect = () =>
+        ({ top: i * ROW - ROW, bottom: (i + 1) * ROW - ROW, height: ROW }) as DOMRect;
+    });
+    await w.find(".pins-list").trigger("scroll");
+    // lower half of C now: the slot is after it
+    const bars = w.findAll(".drop-bar");
+    expect(bars).toHaveLength(1);
+    expect(bars[0].element.previousElementSibling).toBe(w.findAll(".pin-row")[2].element);
+    await fire(w, rows[0].element, "pointerup", { clientY: 45 });
+    w.unmount();
+  });
+});
+
 describe("Sidebar pin context menu", () => {
   beforeEach(() => {
     invokeMock.mockReset();

@@ -200,7 +200,14 @@ function togglePinFromMenu() {
   const m = menu.value;
   if (!m) return;
   if (tree.isPinned(m.path)) tree.removePin(m.path);
-  else tree.addPin(m.path, m.name);
+  else {
+    tree.addPin(m.path, m.name);
+    // the new pin lands at the end: bring it into view
+    nextTick(() => {
+      const list = pinsList.value;
+      if (list) list.scrollTop = list.scrollHeight;
+    });
+  }
   menu.value = null;
 }
 
@@ -284,11 +291,36 @@ async function pinClick(pin: Pin) {
     dragMoved = false;
     return;
   }
-  await tree.pinClick(pin);
+  if (!(await tree.pinClick(pin))) return;
   await nextTick();
   // the pin's row scrolls just out of view so it tops the stack with its
   // contents right under
   scrollRowTo(pin.path, -ROW_H);
+}
+
+const pinsList = ref<HTMLElement | null>(null);
+
+// dragging near the top or bottom of the pin list scrolls it, so a pin can
+// be moved past what is visible
+const EDGE = 18;
+const SCROLL_STEP = 4;
+let autoScroll = 0;
+function autoScrollTick() {
+  const d = drag.value;
+  const list = pinsList.value;
+  if (!d || !list) {
+    autoScroll = 0;
+    return;
+  }
+  const r = list.getBoundingClientRect();
+  const dir = d.y < r.top + EDGE ? -1 : d.y > r.bottom - EDGE ? 1 : 0;
+  if (dir) list.scrollTop += dir * SCROLL_STEP;
+  autoScroll = dir ? requestAnimationFrame(autoScrollTick) : 0;
+}
+// the list moved under a held pin: the drop slot follows the pointer
+function onPinsScroll() {
+  const d = drag.value;
+  if (d?.active) d.to = slotAt(d.y);
 }
 
 function slotAt(y: number): number {
@@ -326,6 +358,7 @@ function onPinMove(e: PointerEvent) {
   d.to = slotAt(e.clientY);
   d.x = e.clientX;
   d.y = e.clientY;
+  if (!autoScroll) autoScroll = requestAnimationFrame(autoScrollTick);
 }
 
 function onPinUp(e: PointerEvent) {
@@ -336,6 +369,8 @@ function onPinUp(e: PointerEvent) {
 
 function endPinDrag() {
   drag.value = null;
+  cancelAnimationFrame(autoScroll);
+  autoScroll = 0;
   window.removeEventListener("pointermove", onPinMove);
   window.removeEventListener("pointerup", onPinUp);
   window.removeEventListener("pointercancel", endPinDrag);
@@ -446,7 +481,7 @@ async function deleteFile(path: string) {
         <i v-if="!pinsOpen" class="ph ph-push-pin pin-icon" />
         <span class="row-name">{{ pinsOpen ? "PINNED" : "Pinned" }}</span>
       </div>
-      <div v-if="pinsOpen" class="pins-list">
+      <div v-if="pinsOpen" ref="pinsList" class="pins-list" @scroll.passive="onPinsScroll">
         <template v-for="(p, i) in tree.pins.value" :key="p.path">
           <div v-if="drag?.active && drag.to === i && isMove(drag)" class="drop-bar" />
           <div
@@ -676,10 +711,12 @@ async function deleteFile(path: string) {
 .pins-head.closed:hover {
   background: var(--color-neutral-900);
 }
+/* six pins show; the rest scroll inside the list without moving the tree */
 .pins-list {
-  max-height: 50vh;
+  max-height: calc(6 * 26px);
   overflow-y: auto;
-  padding: 0 8px 10px;
+  overscroll-behavior: contain;
+  padding: 0 8px;
 }
 /* open folders enclosing the top of the view, drive first */
 .stack {
@@ -717,24 +754,14 @@ async function deleteFile(path: string) {
 }
 /* zero net height so rows do not shift while the bar is shown */
 .drop-bar {
-  height: 3px;
-  margin: -1.5px 8px;
-  border-radius: 2px;
+  height: 2px;
+  margin: -1px 8px;
+  border-radius: 1px;
   background: var(--color-accent);
   box-shadow: 0 0 6px var(--color-accent-700);
   position: relative;
   z-index: 1;
   pointer-events: none;
-}
-.drop-bar::before {
-  content: "";
-  position: absolute;
-  left: -4px;
-  top: -2.5px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-accent);
 }
 .drag-ghost {
   position: fixed;

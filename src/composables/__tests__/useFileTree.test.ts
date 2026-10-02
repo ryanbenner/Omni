@@ -124,8 +124,10 @@ describe("useFileTree", () => {
       expect.objectContaining({ path: "C:\\Users\\pic.jpg", kind: "file", depth: 2 }),
     ]);
     expect(tree.pins.value[0].count).toBe(1);
-    // reclicking leaves it revealed
-    await tree.pinClick(tree.pins.value[0]);
+    // reclicking the open pin closes the whole tree, drive included
+    expect(await tree.pinClick(tree.pins.value[0])).toBe(false);
+    expect(tree.rows.value).toEqual([expect.objectContaining({ path: "C:\\", open: false })]);
+    expect(await tree.pinClick(tree.pins.value[0])).toBe(true);
     expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\pic.jpg"]);
   });
 
