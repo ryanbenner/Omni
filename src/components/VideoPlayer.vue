@@ -468,6 +468,8 @@ function seekToFraction(e: MouseEvent) {
 function setVolume(e: Event) {
   volume.value = Number((e.target as HTMLInputElement).value);
   if (video.value) video.value.volume = volume.value;
+  // moving the bar while muted means the user wants to hear it
+  if (muted.value) toggleMute();
 }
 
 function toggleMute() {
@@ -685,7 +687,7 @@ const progress = computed(() =>
             min="0"
             max="1"
             step="0.01"
-            :value="volume"
+            :value="muted ? 0 : volume"
             @input="setVolume"
           />
           <button

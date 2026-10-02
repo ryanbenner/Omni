@@ -151,3 +151,31 @@ describe("VideoPlayer settings", () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
   });
 });
+
+describe("VideoPlayer volume bar", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("drops the slider to zero while muted and restores it on unmute", async () => {
+    const { w, el } = mountPlayer(false);
+    await w.find(".volume").setValue("0.6");
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0.6");
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(true);
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0");
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(false);
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0.6");
+  });
+
+  it("dragging the slider while muted unmutes", async () => {
+    const { w, el } = mountPlayer(false);
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(true);
+    await w.find(".volume").setValue("0.3");
+    expect(el.muted).toBe(false);
+    expect(el.volume).toBeCloseTo(0.3);
+  });
+});
