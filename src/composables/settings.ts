@@ -15,6 +15,7 @@ export interface Settings {
     showHidden: boolean;
     reopen: ReopenMode;
     confirmDelete: boolean;
+    openPinFirst: boolean;
   };
   video: {
     defaultSpeed: number; // member of SPEEDS
@@ -36,6 +37,7 @@ export const DEFAULTS: Settings = {
     showHidden: false,
     reopen: "off",
     confirmDelete: true,
+    openPinFirst: false,
   },
   video: { defaultSpeed: 1, persistentVolume: false, volume: 1, muted: false, clipCapMb: 50 },
   image: { zoomStep: "normal" },
@@ -82,6 +84,7 @@ function apply(saved: unknown) {
     settings.general.reopen = g.reopen as ReopenMode;
   }
   if (isBool(g.confirmDelete)) settings.general.confirmDelete = g.confirmDelete;
+  if (isBool(g.openPinFirst)) settings.general.openPinFirst = g.openPinFirst;
   if (typeof v.defaultSpeed === "number" && SPEEDS.includes(v.defaultSpeed)) {
     settings.video.defaultSpeed = v.defaultSpeed;
   }

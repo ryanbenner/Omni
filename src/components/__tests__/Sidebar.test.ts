@@ -436,9 +436,9 @@ describe("Sidebar reveal folder", () => {
     (w.find(".tree-row").element as HTMLElement).getBoundingClientRect = () =>
       ({ top: 28 - hidden }) as DOMRect;
   }
-  const stackNames = (w: ReturnType<typeof mount>) => w.findAll(".stack-row").map((r) => r.text());
+  const stackNames = (w: ReturnType<typeof mount>) => w.findAll(".crumb").map((r) => r.text());
 
-  it("the open folders above the first visible row stack over the tree, drive first", async () => {
+  it("the open folders above the first visible row read as one breadcrumb row, drive first", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
       attachTo: document.body,
@@ -447,7 +447,7 @@ describe("Sidebar reveal folder", () => {
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual([
       "C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg",
     ]);
-    expect(w.find(".stack").exists()).toBe(false);
+    expect(w.find(".crumbs").exists()).toBe(false);
     // rows C:, Pics and part of Sub are above the edge: all three stack
     scrolledBy(w, 60);
     await w.find(".scroll").trigger("scroll");
@@ -459,26 +459,54 @@ describe("Sidebar reveal folder", () => {
     // the drive row exactly at the edge is still visible: nothing stacks
     scrolledBy(w, 0);
     await w.find(".scroll").trigger("scroll");
-    expect(w.find(".stack").exists()).toBe(false);
+    expect(w.find(".crumbs").exists()).toBe(false);
     w.unmount();
   });
 
-  it("with the pin list open, a THIS PC heading stays above the stack", async () => {
-    localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Pics", name: "Pics", count: 0 }]));
+  it("a chain too wide for the row hides middle folders behind an ellipsis", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
       attachTo: document.body,
     });
     await flushPromises();
-    expect(w.find(".head-label").exists()).toBe(false);
     scrolledBy(w, 60);
     await w.find(".scroll").trigger("scroll");
-    expect(w.find(".head-label").text()).toBe("THIS PC");
-    expect(w.find(".pins").classes()).toContain("open");
-    await w.find(".pins-head").trigger("click"); // fold the list: heading goes with it
-    expect(w.find(".head-label").exists()).toBe(false);
-    expect(w.find(".pins").classes()).not.toContain("open");
-    expect(stackNames(w)).toEqual(["C:", "Pics", "Sub"]);
+    // jsdom has no layout: pretend each segment is 100 px wide in a 200 px row
+    const row = w.find(".crumbs").element;
+    Object.defineProperty(row, "clientWidth", { get: () => 200, configurable: true });
+    Object.defineProperty(row, "scrollWidth", {
+      get: () => row.querySelectorAll(".crumb").length * 100,
+      configurable: true,
+    });
+    scrolledBy(w, 26 * 4);
+    await w.find(".scroll").trigger("scroll"); // C:, Pics fit as they are
+    await flushPromises();
+    expect(stackNames(w)).toEqual(["C:", "Pics"]);
+    expect(w.find(".crumb-more").exists()).toBe(false);
+    scrolledBy(w, 60);
+    await w.find(".scroll").trigger("scroll"); // C:, Pics, Sub do not: Pics folds into the ellipsis
+    await flushPromises();
+    expect(stackNames(w)).toEqual(["C:", "Sub"]);
+    expect(w.find(".crumb-more").text()).toBe("…");
+    expect(w.findAll(".crumb-sep")).toHaveLength(2);
+    w.unmount();
+  });
+
+  it("opening a pin can open its first file, in tree order", async () => {
+    Element.prototype.scrollBy = vi.fn();
+    localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Pics", name: "Pics", count: 0 }]));
+    loadSettings();
+    settings.general.openPinFirst = true;
+    const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null }, attachTo: document.body });
+    await flushPromises();
+    await w.find(".pin-row").trigger("click");
+    await flushPromises();
+    // Pics holds the folder Sub first; its own first file is a.jpg
+    expect(w.emitted("openFile")).toEqual([["C:\\Pics\\a.jpg"]]);
+    await w.find(".pin-row").trigger("click"); // closes the tree, opens nothing
+    await flushPromises();
+    expect(w.emitted("openFile")).toHaveLength(1);
+    settings.general.openPinFirst = false;
     w.unmount();
   });
 
@@ -491,7 +519,7 @@ describe("Sidebar reveal folder", () => {
     await flushPromises();
     scrolledBy(w, 60);
     await w.find(".scroll").trigger("scroll");
-    await w.findAll(".stack-row")[1].trigger("click"); // Pics
+    await w.findAll(".crumb")[1].trigger("click"); // Pics
     await flushPromises();
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics"]);
     expect(Element.prototype.scrollBy).toHaveBeenCalled();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -115,10 +115,30 @@ function scroller(): HTMLElement | null {
 }
 
 // the open folders enclosing the first row visible in the tree, drive first:
-// shown as a stack above the tree once they have scrolled out of view, like
-// an editor's sticky scroll. the stack takes its own space above the tree so
-// the row at the top edge is never covered and the chain never flips
+// shown as one breadcrumb row above the tree once they have scrolled out of
+// view. the row takes its own space above the tree so the row at the top
+// edge is never covered and the chain never flips
 const stack = ref<TreeRow[]>([]);
+// middle segments hidden behind an ellipsis so the drive and the innermost
+// folder always fit on the one row
+const hiddenMid = ref(0);
+const crumbs = ref<HTMLElement | null>(null);
+async function fitCrumbs() {
+  hiddenMid.value = 0;
+  await nextTick();
+  const el = crumbs.value;
+  while (el && el.scrollWidth > el.clientWidth && hiddenMid.value < stack.value.length - 2) {
+    hiddenMid.value++;
+    await nextTick();
+  }
+}
+const shown = computed(() => {
+  const s = stack.value;
+  const n = hiddenMid.value;
+  if (!n) return s.map((row) => ({ row, more: false }));
+  // the drive, then an ellipsis standing for the next n folders, then the rest
+  return [{ row: s[0], more: false }, { row: s[1 + n], more: true }, ...s.slice(2 + n).map((row) => ({ row, more: false }))];
+});
 function chainAbove(i: number, includeSelf: boolean): TreeRow[] {
   const rows = tree.rows.value;
   const out: TreeRow[] = [];
@@ -148,6 +168,7 @@ function updateStack() {
   }
   if (next.map((r) => r.path).join("\0") !== stack.value.map((r) => r.path).join("\0")) {
     stack.value = next;
+    fitCrumbs();
   }
 }
 watch(tree.rows, () => nextTick(updateStack));
@@ -293,9 +314,25 @@ async function pinClick(pin: Pin) {
   }
   if (!(await tree.pinClick(pin))) return;
   await nextTick();
-  // the pin's row scrolls just out of view so it tops the stack with its
-  // contents right under
+  // the pin's row scrolls just out of view so it heads the breadcrumb with
+  // its contents right under
   scrollRowTo(pin.path, -ROW_H);
+  if (settings.general.openPinFirst) {
+    const first = firstFileIn(pin.path);
+    if (first) emit("openFile", first);
+  }
+}
+
+// the first file row directly inside a folder, in the tree's order
+function firstFileIn(dir: string): string | null {
+  const rows = tree.rows.value;
+  const i = rows.findIndex((r) => r.path === dir);
+  if (i < 0) return null;
+  const depth = rows[i].depth;
+  for (let j = i + 1; j < rows.length && rows[j].depth > depth; j++) {
+    if (rows[j].kind === "file" && rows[j].depth === depth + 1) return rows[j].path;
+  }
+  return null;
 }
 
 const pinsList = ref<HTMLElement | null>(null);
@@ -502,20 +539,21 @@ async function deleteFile(path: string) {
         />
       </div>
     </div>
-    <div v-if="pinsOpen && stack.length" class="section-label head-label">THIS PC</div>
-    <div v-if="stack.length" class="stack">
-      <div
-        v-for="row in stack"
-        :key="row.path"
-        class="stack-row"
-        :title="row.name"
-        @click="stackClick(row)"
-        @contextmenu="onRowContext($event, row)"
-      >
-        <i class="ph caret ph-caret-down" />
-        <i class="ph folder-icon" :class="row.kind === 'drive' ? 'ph-hard-drive' : 'ph-folder-open'" />
-        <span class="row-name">{{ row.name }}</span>
-      </div>
+    <div v-if="stack.length" ref="crumbs" class="crumbs">
+      <template v-for="(c, i) in shown" :key="c.row.path">
+        <span v-if="i" class="crumb-sep">›</span>
+        <span v-if="c.more" class="crumb-more">…</span>
+        <span v-if="c.more" class="crumb-sep">›</span>
+        <button
+          class="crumb"
+          :class="{ last: i === shown.length - 1 }"
+          :title="c.row.name"
+          @click="stackClick(c.row)"
+          @contextmenu="onRowContext($event, c.row)"
+        >
+          {{ c.row.name }}
+        </button>
+      </template>
     </div>
     <div class="scroll" @scroll.passive="updateStack">
       <div class="section-label">THIS PC</div>
@@ -681,10 +719,6 @@ async function deleteFile(path: string) {
   border-bottom: 1px solid var(--color-neutral-900);
 }
 /* with the pin list open, the tree's heading stays put above the stack */
-.head-label {
-  flex: none;
-  padding: 14px 16px 4px;
-}
 .pins-head {
   display: flex;
   align-items: center;
@@ -718,23 +752,40 @@ async function deleteFile(path: string) {
   overscroll-behavior: contain;
   padding: 0 8px;
 }
-/* open folders enclosing the top of the view, drive first */
-.stack {
+/* open folders enclosing the top of the view, drive first, on one row */
+.crumbs {
   flex: none;
-  border-bottom: 1px solid var(--color-neutral-900);
-}
-.stack-row {
   display: flex;
   align-items: center;
-  gap: 6px;
   height: 26px;
-  padding: 0 6px 0 12px;
+  padding: 0 8px 0 12px;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 13px;
-  color: var(--color-neutral-300);
+  border-bottom: 1px solid var(--color-neutral-900);
+}
+.crumb {
+  flex: none;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  color: var(--color-neutral-500);
   cursor: pointer;
 }
-.stack-row:hover {
+.crumb.last {
+  color: var(--color-neutral-200);
+}
+.crumb:hover {
   background: var(--color-neutral-900);
+  color: var(--color-neutral-200);
+}
+.crumb-sep,
+.crumb-more {
+  flex: none;
+  padding: 0 1px;
+  color: var(--color-neutral-700);
 }
 .pin-row {
   display: flex;
