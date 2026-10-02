@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { ask, message } from "@tauri-apps/plugin-dialog";
+import { message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
-import { useFileTree } from "../composables/useFileTree";
+import { useFileTree, type TreeRow } from "../composables/useFileTree";
 import { settings } from "../composables/settings";
+import { onEscape } from "../composables/dialogStack";
 import { parentDir } from "../composables/pathUtils";
 import { extOf } from "../composables/useImageSave";
 import { filePreview, videoThumbnail } from "../composables/dragPreview";
@@ -71,6 +72,7 @@ const menu = ref<{
   path: string;
   name: string;
   kind: string;
+  row?: DOMRect;
 } | null>(null);
 
 function closeMenu() {
@@ -104,9 +106,37 @@ onUnmounted(() => {
   window.removeEventListener("pointerdown", closeMenu);
   window.removeEventListener("focus", onFocus);
   endPinDrag();
+  closeConfirm();
 });
 
-async function rowClick(row: { kind: string; path: string }) {
+// the drive, the parent of the open file's folder and that folder itself hold
+// at the top while the tree scrolls, stacked in order; a row that is closed
+// drops back into the tree
+const ROW_H = 26;
+function persistTop(row: TreeRow): number | null {
+  if (row.kind === "drive") return 0;
+  if (row.kind !== "folder" || !row.open) return null;
+  const cur = props.currentFolder;
+  if (!cur) return null;
+  const parent = parentDir(cur);
+  const parentIsDrive = parentDir(parent) === parent;
+  if (row.path === parent && !parentIsDrive) return ROW_H;
+  if (row.path === cur) return parentIsDrive ? ROW_H : 2 * ROW_H;
+  return null;
+}
+
+// a closed persistent folder becomes the first row under the ones still held
+function scrollUnderHeld(path: string) {
+  const rows = tree.rows.value;
+  const i = rows.findIndex((r) => r.path === path);
+  const el = root.value?.querySelectorAll<HTMLElement>(".tree-row")[i];
+  const scroller = root.value?.querySelector<HTMLElement>(".scroll");
+  if (i < 0 || !el || !scroller) return;
+  const held = rows.slice(0, i).filter((r) => persistTop(r) !== null).length * ROW_H;
+  scroller.scrollBy(0, el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - held);
+}
+
+async function rowClick(row: TreeRow) {
   if (row.kind === "file") {
     // the click that ends a drag-out must not open the file
     if (fileDragged) {
@@ -126,13 +156,24 @@ async function rowClick(row: { kind: string; path: string }) {
     }
     return;
   }
-  tree.toggle(row.path);
+  const held = row.kind === "folder" && persistTop(row) !== null;
+  await tree.toggle(row.path);
+  if (held) {
+    await nextTick();
+    scrollUnderHeld(row.path);
+  }
 }
 
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
   if (row.kind === "drive") return;
   e.preventDefault();
-  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind };
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind, row: rect };
+}
+
+function onPinContext(e: MouseEvent, pin: Pin) {
+  e.preventDefault();
+  menu.value = { x: e.clientX, y: e.clientY, path: pin.path, name: pin.name, kind: "folder" };
 }
 
 function togglePinFromMenu() {
@@ -332,21 +373,41 @@ async function copyToClipboard() {
   }
 }
 
-async function deleteFromMenu() {
+// delete asks in a pill just above the row; a press anywhere else or escape
+// closes it with nothing done
+const confirm = ref<{ path: string; left: number; bottom: number } | null>(null);
+let offConfirmEscape: (() => void) | null = null;
+function closeConfirm() {
+  confirm.value = null;
+  window.removeEventListener("pointerdown", closeConfirm);
+  offConfirmEscape?.();
+  offConfirmEscape = null;
+}
+
+function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
   if (!m) return;
-  if (settings.general.confirmDelete) {
-    const yes = await ask(`Delete ${m.name}? It will be moved to the Recycle Bin.`, {
-      title: "Delete file",
-      kind: "warning",
-    });
-    if (!yes) return;
+  if (!settings.general.confirmDelete || !m.row) {
+    deleteFile(m.path);
+    return;
   }
+  confirm.value = { path: m.path, left: m.row.left + 8, bottom: window.innerHeight - m.row.top + 4 };
+  window.addEventListener("pointerdown", closeConfirm);
+  offConfirmEscape = onEscape(closeConfirm);
+}
+
+function confirmDelete() {
+  const path = confirm.value?.path;
+  closeConfirm();
+  if (path) deleteFile(path);
+}
+
+async function deleteFile(path: string) {
   try {
-    await invoke("delete_file", { path: m.path });
-    await tree.refresh(parentDir(m.path));
-    emit("fileDeleted", m.path);
+    await invoke("delete_file", { path });
+    await tree.refresh(parentDir(path));
+    emit("fileDeleted", path);
   } catch (e) {
     await message(String(e), { title: "Delete failed", kind: "error" });
   }
@@ -365,6 +426,7 @@ async function deleteFromMenu() {
             :class="{ dragging: drag?.active && drag.from === i }"
             @pointerdown="onPinDown($event, i)"
             @click="pinClick(p)"
+            @contextmenu="onPinContext($event, p)"
           >
             <i class="ph ph-push-pin pin-icon" />
             <span class="row-name">{{ p.name }}</span>
@@ -383,7 +445,8 @@ async function deleteFromMenu() {
         v-for="row in tree.rows.value"
         :key="row.path"
         class="tree-row"
-        :class="{ selected: row.selected, drive: row.kind === 'drive' }"
+        :class="{ selected: row.selected, persist: persistTop(row) !== null }"
+        :style="persistTop(row) !== null ? { top: persistTop(row) + 'px' } : undefined"
         :title="row.name"
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
@@ -483,6 +546,16 @@ async function deleteFromMenu() {
       </template>
     </div>
     <div
+      v-if="confirm"
+      class="confirm-pop tree-confirm"
+      :style="{ left: confirm.left + 'px', bottom: confirm.bottom + 'px' }"
+      @pointerdown.stop
+    >
+      <span class="confirm-text">Are you sure?</span>
+      <button class="btn-yes" @click="confirmDelete">Yes</button>
+      <button class="btn-no" @click="closeConfirm">No</button>
+    </div>
+    <div
       v-if="drag?.active"
       class="drag-ghost"
       :style="{ transform: `translate(${drag.x}px, ${drag.y}px)` }"
@@ -510,7 +583,12 @@ async function deleteFromMenu() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 8px 14px;
+  /* no top padding: chromium insets sticky rows by it, and the held rows
+     must sit flush under the titlebar */
+  padding: 0 8px 14px;
+}
+.scroll > :first-child {
+  margin-top: 8px;
 }
 .section-label {
   font-size: 11px;
@@ -597,12 +675,13 @@ async function deleteFromMenu() {
   color: var(--color-neutral-700);
   font-variant-numeric: tabular-nums;
 }
-/* the drive row holds at the top while the tree scrolls, so one click closes it */
-.tree-row.drive {
+/* held rows stack at the top while the tree scrolls, each in its own box */
+.tree-row.persist {
   position: sticky;
-  top: 0;
   z-index: 1;
   background: #121315;
+  outline: 1px solid var(--color-neutral-800);
+  outline-offset: -1px;
 }
 .tree-row {
   position: relative;
@@ -692,6 +771,10 @@ async function deleteFromMenu() {
   white-space: nowrap;
   direction: rtl;
   text-align: left;
+}
+.tree-confirm {
+  position: fixed;
+  z-index: 20;
 }
 .context-menu {
   position: fixed;
