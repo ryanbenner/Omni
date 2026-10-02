@@ -266,3 +266,53 @@ describe("VideoPlayer file name in the letterbox band", () => {
     expect(noTree.w.find(".file-name").exists()).toBe(false);
   });
 });
+
+describe("VideoPlayer delete confirmation", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+    document.body.innerHTML = "";
+  });
+
+  it("asks in a popover next to the trash icon and deletes only on Yes", async () => {
+    const { w } = mountPlayer(true);
+    await w.find("button[title='Delete file']").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(true);
+    expect(w.find(".confirm-pop").text()).toContain("Are you sure?");
+    expect(w.emitted("deleteFile")).toBeUndefined();
+    await w.find(".confirm-pop .btn-no").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(w.emitted("deleteFile")).toBeUndefined();
+    await w.find("button[title='Delete file']").trigger("click");
+    await w.find(".confirm-pop .btn-yes").trigger("click");
+    expect(w.emitted("deleteFile")).toHaveLength(1);
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+  });
+
+  it("a press elsewhere or Escape closes it with no action", async () => {
+    const { w } = mountPlayer(true);
+    await w.find("button[title='Delete file']").trigger("click");
+    window.dispatchEvent(new Event("pointerdown"));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    await w.find("button[title='Delete file']").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(w.emitted("deleteFile")).toBeUndefined();
+  });
+
+  it("keeps the controls visible while open", async () => {
+    const { w } = mountPlayer(true);
+    await w.find("button[title='Delete file']").trigger("click");
+    expect(w.find(".controls").classes()).not.toContain("hidden");
+  });
+
+  it("deletes at once when confirmation is off", async () => {
+    settings.general.confirmDelete = false;
+    const { w } = mountPlayer(true);
+    await w.find("button[title='Delete file']").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(w.emitted("deleteFile")).toHaveLength(1);
+  });
+});

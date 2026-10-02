@@ -230,7 +230,6 @@ defineExpose({ requestClose });
 }
 .page-footer .btn-apply,
 .page-footer .btn-revert {
-  width: 96px;
-  padding: 0;
+  min-width: 88px;
 }
 </style>

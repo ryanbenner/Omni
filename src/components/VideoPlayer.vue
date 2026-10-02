@@ -17,6 +17,7 @@ import {
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { onEscape } from "../composables/dialogStack";
 import { usePersistentVolume } from "../composables/usePersistentVolume";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean; showName?: boolean }>();
@@ -374,6 +375,30 @@ function closeSpeedMenu() {
   speedMenuOpen.value = false;
 }
 
+// delete asks in a small popover by the trash icon; a press anywhere else or
+// escape closes it with nothing done
+const confirmOpen = ref(false);
+let offConfirmEscape: (() => void) | null = null;
+function closeConfirm() {
+  confirmOpen.value = false;
+  window.removeEventListener("pointerdown", closeConfirm);
+  offConfirmEscape?.();
+  offConfirmEscape = null;
+}
+function requestDelete() {
+  if (!settings.general.confirmDelete) {
+    emit("deleteFile");
+    return;
+  }
+  confirmOpen.value = true;
+  window.addEventListener("pointerdown", closeConfirm);
+  offConfirmEscape = onEscape(closeConfirm);
+}
+function confirmDelete() {
+  closeConfirm();
+  emit("deleteFile");
+}
+
 function toggleSpeedMenu() {
   speedMenuOpen.value = !speedMenuOpen.value;
 }
@@ -435,6 +460,7 @@ onUnmounted(() => {
   clearTimeout(toastTimer);
   clearTimeout(flashTimer);
   window.removeEventListener("pointerdown", closeSpeedMenu);
+  closeConfirm();
 });
 
 watch(src, () => {
@@ -654,7 +680,7 @@ const progress = computed(() =>
       v-if="!failed"
       v-show="!naming"
       class="controls"
-      :class="{ hidden: !controlsVisible && !speedMenuOpen && !trim.active.value }"
+      :class="{ hidden: !controlsVisible && !speedMenuOpen && !confirmOpen && !trim.active.value }"
     >
       <ExportPanel
         v-if="trim.active.value"
@@ -686,9 +712,16 @@ const progress = computed(() =>
       </template>
       <div class="transport">
         <div class="cluster left">
-          <button class="tbtn" title="Delete file" @click="emit('deleteFile')">
-            <i class="ph ph-trash" />
-          </button>
+          <span class="confirm-wrap" @pointerdown.stop>
+            <button class="tbtn" title="Delete file" @click="requestDelete">
+              <i class="ph ph-trash" />
+            </button>
+            <div v-if="confirmOpen" class="confirm-pop">
+              <span class="confirm-text">Are you sure?</span>
+              <button class="btn-yes" @click="confirmDelete">Yes</button>
+              <button class="btn-no" @click="closeConfirm">No</button>
+            </div>
+          </span>
           <span class="speed-chip-wrap" @pointerdown.stop>
             <button class="speed-chip" title="Playback speed" @click="toggleSpeedMenu">
               <i class="ph ph-gauge" />
@@ -944,6 +977,51 @@ const progress = computed(() =>
   background: var(--color-accent-200);
   box-shadow: 0 0 10px color-mix(in oklab, var(--color-accent) 70%, transparent);
   pointer-events: none;
+}
+.confirm-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.confirm-pop {
+  position: absolute;
+  left: 100%;
+  bottom: calc(100% + 6px);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  background: #17181af0;
+  border: 1px solid var(--color-neutral-800);
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-neutral-200);
+}
+.btn-yes,
+.btn-no {
+  height: 24px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-yes {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #fff;
+}
+.btn-yes:hover {
+  background: var(--color-accent-600);
+}
+.btn-no {
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-accent);
+  color: var(--color-neutral-200);
+}
+.btn-no:hover {
+  background: var(--color-neutral-800);
 }
 .transport {
   display: flex;

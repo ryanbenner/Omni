@@ -11,8 +11,8 @@ describe("UnsavedSettingsDialog", () => {
   it("shows the copy, focuses Apply, and emits apply or discard from the buttons", async () => {
     const w = mount(UnsavedSettingsDialog, { attachTo: document.body });
     expect(w.find(".dialog-title").text()).toBe("Unsaved changes");
-    expect(w.find(".dialog-body").text()).toBe("Apply your changes before leaving?");
-    expect(w.findAll(".dialog-actions button").map((b) => b.text())).toEqual(["Exit without saving", "Apply"]);
+    expect(w.find(".dialog-body").text()).toBe("Your changes will be lost unless you apply them.");
+    expect(w.findAll(".dialog-actions button").map((b) => b.text())).toEqual(["Don't Save", "Apply"]);
     expect(document.activeElement).toBe(w.find(".btn-apply").element);
     await w.find(".btn-revert").trigger("click");
     expect(w.emitted("discard")).toHaveLength(1);

@@ -149,7 +149,7 @@ input[type="range"] {
 .btn-apply,
 .btn-revert {
   height: 32px;
-  padding: 0 14px;
+  padding: 0 18px;
   border-radius: 7px;
   font-family: var(--font-body);
   font-size: 13px;

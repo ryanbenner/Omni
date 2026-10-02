@@ -2,13 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + Vue + Typescript App</title>
+    <title>Omni</title>
+    <style>
+      /* painted before any bundle loads: the theme background and the crystal
+         until vue mounts and replaces this markup */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0e0f10;
+      }
+      #app {
+        height: 100%;
+      }
+      .splash {
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+      .splash img {
+        width: 96px;
+        height: 96px;
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes splash-pulse {
+        0%,
+        100% {
+          opacity: 0.55;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="splash"><img src="/splash-icon.png" alt="" /></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
