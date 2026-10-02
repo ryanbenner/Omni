@@ -978,51 +978,6 @@ const progress = computed(() =>
   box-shadow: 0 0 10px color-mix(in oklab, var(--color-accent) 70%, transparent);
   pointer-events: none;
 }
-.confirm-wrap {
-  position: relative;
-  display: inline-flex;
-}
-.confirm-pop {
-  position: absolute;
-  left: 100%;
-  bottom: calc(100% + 6px);
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
-  border-radius: 999px;
-  background: #17181af0;
-  border: 1px solid var(--color-neutral-800);
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--color-neutral-200);
-}
-.btn-yes,
-.btn-no {
-  height: 24px;
-  padding: 0 14px;
-  border-radius: 999px;
-  font-family: var(--font-body);
-  font-size: 12px;
-  cursor: pointer;
-}
-.btn-yes {
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  color: #fff;
-}
-.btn-yes:hover {
-  background: var(--color-accent-600);
-}
-.btn-no {
-  background: var(--color-neutral-900);
-  border: 1px solid var(--color-accent);
-  color: var(--color-neutral-200);
-}
-.btn-no:hover {
-  background: var(--color-neutral-800);
-}
 .transport {
   display: flex;
   align-items: center;
