@@ -151,3 +151,118 @@ describe("VideoPlayer settings", () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("read_dir_entries", { path: "/f", showHidden: true });
   });
 });
+
+describe("VideoPlayer volume bar", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("drops the slider to zero while muted and restores it on unmute", async () => {
+    const { w, el } = mountPlayer(false);
+    await w.find(".volume").setValue("0.6");
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0.6");
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(true);
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0");
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(false);
+    expect((w.find(".volume").element as HTMLInputElement).value).toBe("0.6");
+  });
+
+  it("dragging the slider while muted unmutes", async () => {
+    const { w, el } = mountPlayer(false);
+    await w.find("button[title='Mute (M)']").trigger("click");
+    expect(el.muted).toBe(true);
+    await w.find(".volume").setValue("0.3");
+    expect(el.muted).toBe(false);
+    expect(el.volume).toBeCloseTo(0.3);
+  });
+});
+
+describe("VideoPlayer play/pause flash", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    loadSettings();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("a paused video shows no badge until something toggles it", () => {
+    const { w } = mountPlayer(true);
+    expect(w.find(".play-badge").exists()).toBe(false);
+  });
+
+  it("starting playback flashes the play icon and it is gone after 200 ms", async () => {
+    const { w, el } = mountPlayer(true);
+    await w.find(".play-btn").trigger("click");
+    expect(el.play).toHaveBeenCalledOnce();
+    const badge = w.find(".play-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.find("i").classes()).toContain("ph-play");
+    vi.advanceTimersByTime(199);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(true);
+    vi.advanceTimersByTime(1);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(false);
+  });
+
+  it("pausing flashes the pause icon, and a click on the video flashes too", async () => {
+    const { w, el, pause } = mountPlayer(false);
+    await w.find(".play-btn").trigger("click");
+    expect(pause).toHaveBeenCalledOnce();
+    expect(w.find(".play-badge i").classes()).toContain("ph-pause");
+    vi.advanceTimersByTime(200);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(false);
+    Object.defineProperty(el, "paused", { value: true, configurable: true });
+    await w.find("video").trigger("click");
+    expect(w.find(".play-badge i").classes()).toContain("ph-play");
+  });
+});
+
+describe("VideoPlayer file name in the letterbox band", () => {
+  const rectStub = (w: number, h: number) => () => ({ width: w, height: h, top: 0, left: 0, right: w, bottom: h, x: 0, y: 0, toJSON() {} }) as DOMRect;
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = original;
+  });
+
+  function mountWithBand(showName: boolean, wrapW: number, wrapH: number) {
+    HTMLElement.prototype.getBoundingClientRect = rectStub(wrapW, wrapH);
+    const w = mount(VideoPlayer, { props: { item, showName } });
+    const el = w.find("video").element as HTMLVideoElement;
+    Object.defineProperty(el, "videoWidth", { value: 1920, configurable: true });
+    Object.defineProperty(el, "videoHeight", { value: 1080, configurable: true });
+    el.play = vi.fn().mockResolvedValue(undefined);
+    return { w, el };
+  }
+
+  it("shows the full name when the tree is open and the video leaves a band above it", async () => {
+    const { w, el } = mountWithBand(true, 800, 900); // 16:9 in a tall wrap: 225px band each side
+    el.dispatchEvent(new Event("loadedmetadata"));
+    await w.vm.$nextTick();
+    const name = w.find(".file-name");
+    expect(name.exists()).toBe(true);
+    expect(name.text()).toBe("a.mp4");
+  });
+
+  it("hides it when the video fills the wrap", async () => {
+    const { w, el } = mountWithBand(true, 800, 450); // exact 16:9: no band
+    el.dispatchEvent(new Event("loadedmetadata"));
+    await w.vm.$nextTick();
+    expect(w.find(".file-name").exists()).toBe(false);
+  });
+
+  it("hides it when the band is too thin or the tree is hidden", async () => {
+    const thin = mountWithBand(true, 800, 480); // 15px band
+    thin.el.dispatchEvent(new Event("loadedmetadata"));
+    await thin.w.vm.$nextTick();
+    expect(thin.w.find(".file-name").exists()).toBe(false);
+    const noTree = mountWithBand(false, 800, 900);
+    noTree.el.dispatchEvent(new Event("loadedmetadata"));
+    await noTree.w.vm.$nextTick();
+    expect(noTree.w.find(".file-name").exists()).toBe(false);
+  });
+});

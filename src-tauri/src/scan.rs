@@ -88,17 +88,34 @@ pub fn scan_media(path: String, show_hidden: bool) -> Result<ScanResult, String>
         }
     }
     sort_items(&mut items);
-    // canonicalize both sides so windows verbatim paths compare equal
+    // items are built from the caller's own directory string, so the launched
+    // file matches by text on every ordinary open; canonicalizing each item is
+    // the fallback for verbatim or symlinked spellings, and it is the expensive
+    // part on large folders because this scan also runs on every window focus
     let start_index = items
         .iter()
-        .position(|i| {
-            Path::new(&i.path)
-                .canonicalize()
-                .map(|c| c == launched)
-                .unwrap_or(false)
+        .position(|i| same_user_path(&i.path, &path))
+        .or_else(|| {
+            items.iter().position(|i| {
+                Path::new(&i.path)
+                    .canonicalize()
+                    .map(|c| c == launched)
+                    .unwrap_or(false)
+            })
         })
         .unwrap_or(0);
     Ok(ScanResult { items, start_index })
+}
+
+// separator-agnostic, and case-insensitive where the filesystem is
+fn same_user_path(a: &str, b: &str) -> bool {
+    let a = a.replace('\\', "/");
+    let b = b.replace('\\', "/");
+    if cfg!(windows) {
+        a.eq_ignore_ascii_case(&b)
+    } else {
+        a == b
+    }
 }
 
 #[cfg(test)]
@@ -157,6 +174,26 @@ mod tests {
         let launched = dir.path().join("photo.jpg");
         let result = scan_media(launched.to_string_lossy().into_owned(), false).unwrap();
         assert_eq!(result.items.len(), 2); // txt filtered out
+        assert_eq!(result.items[result.start_index].name, "photo.jpg");
+    }
+
+    #[test]
+    fn same_user_path_ignores_separator_style_and_windows_case() {
+        assert!(same_user_path("C:\\Videos\\a.mp4", "C:/Videos/a.mp4"));
+        assert!(!same_user_path("C:/Videos/a.mp4", "C:/Videos/b.mp4"));
+        assert_eq!(same_user_path("C:/Videos/A.MP4", "C:/Videos/a.mp4"), cfg!(windows));
+    }
+
+    #[test]
+    fn scan_finds_the_start_index_by_text_for_a_forward_slash_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["clip.mp4", "photo.jpg"] {
+            File::create(dir.path().join(name)).unwrap();
+        }
+        // the caller's spelling may differ from the directory walk's only in
+        // separators; the text match must still land on the launched file
+        let launched = format!("{}/photo.jpg", dir.path().to_string_lossy());
+        let result = scan_media(launched, false).unwrap();
         assert_eq!(result.items[result.start_index].name, "photo.jpg");
     }
 

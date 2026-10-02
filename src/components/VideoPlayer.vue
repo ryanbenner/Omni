@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { DirListing, MediaItem, ViewerAction } from "../types";
 import { clampTime, formatTime, SPEEDS } from "../composables/videoControls";
@@ -19,7 +19,7 @@ import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
 import { usePersistentVolume } from "../composables/usePersistentVolume";
 
-const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
+const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean; showName?: boolean }>();
 const emit = defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1] }>();
 
 function navClick(dir: -1 | 1, e: MouseEvent) {
@@ -209,6 +209,26 @@ function runExport(o: { input: string; output: string; mode: ExportRequest["mode
 
 const container = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
+const wrap = ref<HTMLElement | null>(null);
+
+// the file name sits in the letterbox band above the picture, so it needs the
+// band's height: the wrap size against the video's natural aspect
+const natural = ref({ w: 0, h: 0 });
+const wrapSize = ref({ w: 0, h: 0 });
+const NAME_BAND_MIN = 24;
+let wrapObserver: ResizeObserver | null = null;
+function measureWrap() {
+  const r = wrap.value?.getBoundingClientRect();
+  if (r) wrapSize.value = { w: r.width, h: r.height };
+}
+const topGap = computed(() => {
+  const { w, h } = wrapSize.value;
+  const n = natural.value;
+  if (!w || !h || !n.w || !n.h) return 0;
+  const rendered = Math.min(h, (w * n.h) / n.w);
+  return (h - rendered) / 2;
+});
+const showName = computed(() => props.showName === true && topGap.value >= NAME_BAND_MIN);
 const src = computed(() => convertFileSrc(props.item.path));
 
 const playing = ref(false);
@@ -369,7 +389,14 @@ watch(speedMenuOpen, (open) => {
 });
 
 
-const showBadge = computed(() => !playing.value && !failed.value);
+// a brief badge with the icon of the action just taken; it fades over 0.2 s
+const badge = ref<"play" | "pause" | null>(null);
+let flashTimer = 0;
+function flashBadge(kind: "play" | "pause") {
+  badge.value = kind;
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => (badge.value = null), 200);
+}
 
 // on-screen ten second skips clamp at the clip edges and never change files
 function seekTen(dir: -1 | 1) {
@@ -391,11 +418,22 @@ function hideControls() {
   controlsVisible.value = false;
 }
 
+onMounted(() => {
+  measureWrap();
+  // jsdom has no ResizeObserver; the mount measurement covers tests
+  if (typeof ResizeObserver !== "undefined" && wrap.value) {
+    wrapObserver = new ResizeObserver(measureWrap);
+    wrapObserver.observe(wrap.value);
+  }
+});
+
 onUnmounted(() => {
+  wrapObserver?.disconnect();
   stopRevLoop();
   clearTimeout(holdTimer);
   clearTimeout(hideTimer);
   clearTimeout(toastTimer);
+  clearTimeout(flashTimer);
   window.removeEventListener("pointerdown", closeSpeedMenu);
 });
 
@@ -416,6 +454,8 @@ watch(src, () => {
 function onLoadedMetadata() {
   const el = video.value;
   if (!el) return;
+  natural.value = { w: el.videoWidth, h: el.videoHeight };
+  measureWrap();
   duration.value = el.duration;
   el.playbackRate = speed.value;
   el.volume = volume.value;
@@ -447,7 +487,11 @@ function togglePlay() {
       el.currentTime = trim.inSec.value;
     }
     el.play().catch(() => {});
-  } else el.pause();
+    flashBadge("play");
+  } else {
+    el.pause();
+    flashBadge("pause");
+  }
 }
 
 function seekBy(seconds: number) {
@@ -468,6 +512,8 @@ function seekToFraction(e: MouseEvent) {
 function setVolume(e: Event) {
   volume.value = Number((e.target as HTMLInputElement).value);
   if (video.value) video.value.volume = volume.value;
+  // moving the bar while muted means the user wants to hear it
+  if (muted.value) toggleMute();
 }
 
 function toggleMute() {
@@ -561,7 +607,8 @@ const progress = computed(() =>
         this viewer yet.
       </p>
     </div>
-    <div v-else class="video-wrap">
+    <div v-else ref="wrap" class="video-wrap">
+      <div v-if="showName" class="file-name">{{ item.name }}</div>
       <video
         ref="video"
         :src="src"
@@ -577,10 +624,10 @@ const progress = computed(() =>
         @pointerleave="endHold"
         @click="onVideoClick"
       />
-      <div v-if="showBadge" class="badge-layer">
-        <button class="play-badge" title="Play (Space)" @click="togglePlay">
-          <i class="ph-fill ph-play" />
-        </button>
+      <div v-if="badge" class="badge-layer">
+        <div :key="badge" class="play-badge" :class="badge">
+          <i class="ph-fill" :class="badge === 'play' ? 'ph-play' : 'ph-pause'" />
+        </div>
       </div>
       <template v-if="!naming && !trim.active.value">
         <button
@@ -685,7 +732,7 @@ const progress = computed(() =>
             min="0"
             max="1"
             step="0.01"
-            :value="volume"
+            :value="muted ? 0 : volume"
             @input="setVolume"
           />
           <button
@@ -754,6 +801,19 @@ const progress = computed(() =>
   height: 100%;
   object-fit: contain;
 }
+.file-name {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 5;
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--color-neutral-300);
+  pointer-events: none;
+}
 .badge-layer {
   position: absolute;
   inset: 0;
@@ -771,14 +831,21 @@ const progress = computed(() =>
   border: 1px solid var(--color-accent-700);
   color: var(--color-accent-200);
   box-shadow: 0 0 40px color-mix(in oklab, var(--color-accent) 30%, transparent);
-  pointer-events: auto;
-  cursor: pointer;
   font-size: 26px;
+  animation: badge-fade 0.2s ease-out forwards;
+}
+.play-badge.play {
   padding-left: 3px;
 }
-.play-badge:hover {
-  border-color: var(--color-accent);
-  background: #1d1f22cc;
+@keyframes badge-fade {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.15);
+  }
 }
 .nav-arrow {
   position: absolute;

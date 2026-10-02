@@ -370,6 +370,7 @@ defineExpose({ openFile, enterCollage });
           :item="list.current.value"
           :has-prev="list.hasPrev.value"
           :has-next="list.hasNext.value"
+          :show-name="sidebarOpen"
           @delete-file="deleteCurrent"
           @clip-saved="onClipSaved"
           @collage="enterCollage([list.current.value.path])"
