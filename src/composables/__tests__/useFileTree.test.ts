@@ -113,78 +113,31 @@ describe("useFileTree", () => {
     expect(tree2.pins.value).toHaveLength(0);
   });
 
-  it("pinClick scopes the tree to drive plus pinned folder, skipping ancestors", async () => {
+  it("pinClick collapses the tree and opens the chain down to the pinned folder", async () => {
     const tree = useFileTree(() => {});
     await tree.init();
     await tree.addPin("C:\\Users", "Users");
     await tree.pinClick(tree.pins.value[0]);
     expect(tree.rows.value).toEqual([
-      expect.objectContaining({ path: "C:\\", kind: "drive", depth: 0, open: false }),
+      expect.objectContaining({ path: "C:\\", kind: "drive", depth: 0, open: true }),
       expect.objectContaining({ path: "C:\\Users", kind: "folder", depth: 1, open: true }),
       expect.objectContaining({ path: "C:\\Users\\pic.jpg", kind: "file", depth: 2 }),
     ]);
-    expect(tree.scope.value?.path).toBe("C:\\Users");
     expect(tree.pins.value[0].count).toBe(1);
-  });
-
-  it("clearScope returns to the full tree, collapsed by the pin entry", async () => {
-    const tree = useFileTree(() => {});
-    await tree.init();
-    await tree.toggle("C:\\"); // expand drive in full view first
-    await tree.addPin("C:\\Users", "Users");
-    await tree.pinClick(tree.pins.value[0]); // entering a pin collapses prior state
-    tree.clearScope();
-    expect(tree.scope.value).toBeNull();
-    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\"]);
-  });
-
-  it("reclicking the same pin collapses everything cleanly", async () => {
-    const tree = useFileTree(() => {});
-    await tree.init();
-    await tree.toggle("C:\\"); // leftover full-view expansion
-    await tree.addPin("C:\\Users", "Users");
+    // reclicking leaves it revealed
     await tree.pinClick(tree.pins.value[0]);
-    expect(tree.scope.value?.path).toBe("C:\\Users");
-    await tree.pinClick(tree.pins.value[0]);
-    expect(tree.scope.value).toBeNull();
-    // nothing left open anywhere: just the collapsed drive root
-    expect(tree.rows.value).toEqual([
-      expect.objectContaining({ path: "C:\\", kind: "drive", open: false }),
-    ]);
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\pic.jpg"]);
   });
 
-  it("switching pins swaps the scope and starts clean", async () => {
+  it("switching pins closes what the previous pin opened", async () => {
     const tree = useFileTree(() => {});
     await tree.init();
     await tree.addPin("C:\\Users", "Users");
     await tree.addPin("C:\\Games", "Games");
     await tree.pinClick(tree.pins.value[0]);
     await tree.pinClick(tree.pins.value[1]);
-    expect(tree.scope.value?.path).toBe("C:\\Games");
-    expect(tree.rows.value.map((r) => r.path)).toEqual([
-      "C:\\",
-      "C:\\Games",
-      "C:\\Games\\v.mp4",
-    ]);
-    // toggling back to the first pin shows it fresh, not doubled up
-    await tree.pinClick(tree.pins.value[0]);
-    expect(tree.rows.value.map((r) => r.path)).toEqual([
-      "C:\\",
-      "C:\\Users",
-      "C:\\Users\\pic.jpg",
-    ]);
-  });
-
-  it("reveal inside the scope keeps it; reveal outside clears it", async () => {
-    const tree = useFileTree(() => {});
-    await tree.init();
-    await tree.addPin("C:\\Users", "Users");
-    await tree.pinClick(tree.pins.value[0]);
-    await tree.reveal("C:\\Users\\pic.jpg");
-    expect(tree.scope.value?.path).toBe("C:\\Users");
-    await tree.reveal("C:\\stray.mp4"); // outside the pinned folder
-    expect(tree.scope.value).toBeNull();
-    expect(tree.rows.value[0]).toMatchObject({ path: "C:\\", kind: "drive" });
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users"]);
+    expect(tree.rows.value[1].open).toBe(false);
   });
 
   it("passes the show-hidden setting when reading folders and pin counts", async () => {
@@ -329,16 +282,5 @@ describe("live updates", () => {
     expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\pic.jpg"]);
     expect(tree.rows.value[1].open).toBe(true);
     expect(tree.rows.value.some((r) => r.selected)).toBe(false);
-  });
-
-  it("revealDir outside a pin scope drops back to the full tree", async () => {
-    const tree = useFileTree(() => {});
-    await tree.init();
-    await tree.addPin("C:\\Games", "Games");
-    await tree.pinClick(tree.pins.value[0]);
-    expect(tree.scope.value?.path).toBe("C:\\Games");
-    await tree.revealDir("C:\\Users");
-    expect(tree.scope.value).toBeNull();
-    expect(tree.rows.value.map((r) => r.path)).toContain("C:\\Users\\pic.jpg");
   });
 });
