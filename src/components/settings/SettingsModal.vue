@@ -169,6 +169,7 @@ defineExpose({ requestClose });
   outline-offset: 2px;
 }
 .settings-page {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -212,19 +213,20 @@ defineExpose({ requestClose });
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 28px;
+  /* room at the end so the last row can scroll clear of the floating buttons */
+  padding: 28px 28px 64px;
 }
 .page-body > :deep(.setting-row),
 .page-body > :deep(.placeholder) {
   max-width: 640px;
 }
 .page-footer {
-  flex: none;
+  /* floats over the scrolling page, pinned to the corner */
+  position: absolute;
+  right: 28px;
+  bottom: 16px;
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
-  padding: 12px 28px;
-  border-top: 1px solid var(--color-neutral-900);
 }
 .page-footer .btn-apply,
 .page-footer .btn-revert {
