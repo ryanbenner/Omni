@@ -128,14 +128,16 @@ describe("Sidebar pin drag", () => {
     await fire(w, rows[1].element, "pointerup", { clientY: 40 });
     await fire(w, rows[1].element, "click", {  });
     await flushPromises();
-    // the pin opens the chain down to it and folds the pin list to one line
+    // the pin opens the chain down to it; the pin list stays open
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "A", "B", "C"]);
-    expect(w.find(".pins-head").classes()).toContain("closed");
-    expect(w.find(".pins-list").exists()).toBe(false);
-    // the caret brings the list back in its usual look
-    await w.find(".pins-head").trigger("click");
     expect(w.find(".pins-head").classes()).toContain("open");
     expect(w.find(".pins-head").text()).toBe("PINNED");
+    expect(names(w)).toEqual(["A", "B", "C"]);
+    // only the caret folds it, to a single row, and brings it back
+    await w.find(".pins-head").trigger("click");
+    expect(w.find(".pins-head").classes()).toContain("closed");
+    expect(w.find(".pins-list").exists()).toBe(false);
+    await w.find(".pins-head").trigger("click");
     expect(names(w)).toEqual(["A", "B", "C"]);
   });
 
