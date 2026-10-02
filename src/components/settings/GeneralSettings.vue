@@ -31,6 +31,12 @@ const reopenOptions: { value: ReopenMode; label: string }[] = [
   >
     <SettingSelect v-model="draft.general.reopen" :options="reopenOptions" />
   </SettingRow>
+  <SettingRow
+    label="Open the first file when opening a pin"
+    description="Videos and pictures only. The tree still scrolls to the folder."
+  >
+    <SettingToggle v-model="draft.general.openPinFirst" />
+  </SettingRow>
   <SettingRow label="Confirm before moving to the Recycle Bin">
     <SettingToggle v-model="draft.general.confirmDelete" />
   </SettingRow>

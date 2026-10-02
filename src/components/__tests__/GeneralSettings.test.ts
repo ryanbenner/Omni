@@ -11,7 +11,7 @@ describe("GeneralSettings", () => {
     openDraft();
   });
 
-  it("renders the six rows in order", () => {
+  it("renders the seven rows in order", () => {
     const w = mount(GeneralSettings);
     expect(w.findAll(".setting-label").map((l) => l.text())).toEqual([
       "Show file tree at launch",
@@ -19,6 +19,7 @@ describe("GeneralSettings", () => {
       "Wrap around at the end of a folder",
       "Show hidden files",
       "Reopen at launch",
+      "Open the first file when opening a pin",
       "Confirm before moving to the Recycle Bin",
     ]);
   });
@@ -42,15 +43,18 @@ describe("GeneralSettings", () => {
   it("the toggles write the draft, not the store", async () => {
     const w = mount(GeneralSettings);
     const switches = w.findAll("[role=switch]");
-    expect(switches).toHaveLength(5);
+    expect(switches).toHaveLength(6);
     await switches[2].trigger("click");
     await switches[3].trigger("click");
     await switches[4].trigger("click");
+    await switches[5].trigger("click");
     expect(draft.general.wrapAround).toBe(true);
     expect(draft.general.showHidden).toBe(true);
+    expect(draft.general.openPinFirst).toBe(true);
     expect(draft.general.confirmDelete).toBe(false);
     expect(settings.general.wrapAround).toBe(false);
     expect(settings.general.showHidden).toBe(false);
+    expect(settings.general.openPinFirst).toBe(false);
     expect(settings.general.confirmDelete).toBe(true);
   });
 });

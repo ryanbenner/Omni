@@ -108,15 +108,19 @@ describe("settings store", () => {
       showHidden: false,
       reopen: "off",
       confirmDelete: true,
+      openPinFirst: false,
     });
   });
 
   it("validates the new general fields one by one", () => {
     localStorage.setItem(
       KEY,
-      JSON.stringify({ general: { wrapAround: true, showHidden: "yes", reopen: "file", confirmDelete: 0 } }),
+      JSON.stringify({
+        general: { wrapAround: true, showHidden: "yes", reopen: "file", confirmDelete: 0, openPinFirst: true },
+      }),
     );
     loadSettings();
+    expect(settings.general.openPinFirst).toBe(true);
     expect(settings.general.wrapAround).toBe(true);
     expect(settings.general.showHidden).toBe(false);
     expect(settings.general.reopen).toBe("file");
