@@ -129,6 +129,17 @@ describe("useFileTree", () => {
     expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\pic.jpg"]);
   });
 
+  it("closing a folder closes everything open inside it", async () => {
+    const tree = useFileTree(() => {});
+    await tree.init();
+    await tree.revealDir("C:\\Users");
+    await tree.toggle("C:\\"); // close the drive
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\"]);
+    await tree.toggle("C:\\"); // reopen: Users is closed now
+    expect(tree.rows.value.map((r) => r.path)).toEqual(["C:\\", "C:\\Users"]);
+    expect(tree.rows.value[1].open).toBe(false);
+  });
+
   it("switching pins closes what the previous pin opened", async () => {
     const tree = useFileTree(() => {});
     await tree.init();
