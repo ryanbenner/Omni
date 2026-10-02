@@ -15,9 +15,20 @@ import Sidebar from "../Sidebar.vue";
 const ROW = 26;
 
 function wire() {
-  invokeMock.mockImplementation((cmd: string) => {
+  invokeMock.mockImplementation((cmd: string, args?: { path?: string }) => {
     if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
-    if (cmd === "read_dir_entries") return Promise.resolve({ folders: [], files: [] });
+    if (cmd === "read_dir_entries") {
+      if (args?.path === "C:\\")
+        return Promise.resolve({
+          folders: [
+            { path: "C:\\A", name: "A" },
+            { path: "C:\\B", name: "B" },
+            { path: "C:\\C", name: "C" },
+          ],
+          files: [],
+        });
+      return Promise.resolve({ folders: [], files: [] });
+    }
     return Promise.reject(`unexpected ${cmd}`);
   });
 }
@@ -62,6 +73,8 @@ describe("Sidebar pin drag", () => {
     localStorage.clear();
     document.body.innerHTML = "";
     wire();
+    // jsdom has no scrollBy; opening a pin scrolls its contents under it
+    Element.prototype.scrollBy = vi.fn();
   });
 
   it("dragging a pin shows a drop bar and reorders on release", async () => {
@@ -116,8 +129,9 @@ describe("Sidebar pin drag", () => {
     await fire(w, rows[1].element, "click", {  });
     await flushPromises();
     expect(names(w)).toEqual(["A", "B", "C"]);
-    // pinClick scopes the tree to the pin: the folder row appears in the tree
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toContain("B");
+    // the pin opens the chain down to it: the drive and the folder row appear
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "A", "B", "C"]);
+    expect(w.findAll(".tree-row")[2].classes()).toContain("persist");
   });
 
   it("the click that ends a drag does not open the pin", async () => {
@@ -129,7 +143,7 @@ describe("Sidebar pin drag", () => {
     await fire(w, rows[2].element, "click", {  });
     await flushPromises();
     expect(names(w)).toEqual(["C", "A", "B"]);
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).not.toContain("C");
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:"]);
   });
 });
 
@@ -398,6 +412,44 @@ describe("Sidebar reveal folder", () => {
     await w.findAll(".tree-row")[1].trigger("click"); // collapse Pics, stuck under the drive
     await flushPromises();
     expect(w.findAll(".tree-row").map((r) => r.classes().includes("persist"))).toEqual([true, false]);
+    w.unmount();
+  });
+
+  it("opening a pin holds the drive, its parent and the pin, with its contents right under", async () => {
+    Element.prototype.scrollBy = vi.fn();
+    localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Pics\\Sub", name: "Sub", count: 0 }]));
+    const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null }, attachTo: document.body });
+    await flushPromises();
+    await w.find(".pin-row").trigger("click");
+    await flushPromises();
+    const rows = w.findAll(".tree-row");
+    expect(rows.map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg"]);
+    expect(rows.map((r) => (r.element as HTMLElement).style.top)).toEqual(["0px", "26px", "52px", "", "", ""]);
+    expect(Element.prototype.scrollBy).toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("rows pinned at the top get the stuck look, the lowest one carrying the line", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const scroller = w.find(".scroll").element as HTMLElement;
+    expect(scroller.style.getPropertyValue("--held")).toBe("78px");
+    const rows = w.findAll(".tree-row");
+    scroller.getBoundingClientRect = () => ({ top: 28 }) as DOMRect;
+    const tops = [28, 54, 200];
+    rows.slice(0, 3).forEach((r, i) => {
+      (r.element as HTMLElement).getBoundingClientRect = () => ({ top: tops[i] }) as DOMRect;
+    });
+    Object.defineProperty(scroller, "scrollTop", { value: 120, configurable: true });
+    await w.find(".scroll").trigger("scroll");
+    const cls = () => w.findAll(".tree-row").slice(0, 3).map((r) => [r.classes().includes("stuck"), r.classes().includes("stuck-last")]);
+    expect(cls()).toEqual([[true, false], [true, true], [false, false]]);
+    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    await w.find(".scroll").trigger("scroll");
+    expect(cls()).toEqual([[false, false], [false, false], [false, false]]);
     w.unmount();
   });
 

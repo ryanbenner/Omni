@@ -51,21 +51,6 @@ export function useFileTree(openFile: (path: string) => void) {
   const currentPath = ref<string | null>(null);
   const pins = ref<Pin[]>([]);
   const version = ref(0); // bumped on any node mutation so rows recompute
-  // when set, the tree shows only the pin's drive plus the pin as root
-  const scope = ref<Pin | null>(null);
-
-  // separator-aware containment so "C:\Users" does not match "C:\UsersX"
-  function isWithin(child: string, parent: string): boolean {
-    const c = child.toLowerCase();
-    const p = parent.toLowerCase();
-    if (c === p) return true;
-    const sep = parent.includes("\\") ? "\\" : "/";
-    return c.startsWith(p.endsWith(sep) ? p : p + sep);
-  }
-
-  function driveOf(path: string): DriveInfo | null {
-    return roots.value.find((d) => isWithin(path, d.path)) ?? null;
-  }
 
   function node(path: string): NodeState {
     let n = nodes.value.get(path);
@@ -109,15 +94,9 @@ export function useFileTree(openFile: (path: string) => void) {
     version.value++;
   }
 
-  // expands each dir in order; inside a pin scope only the dirs within it,
-  // and a target outside the scope drops back to the full tree
+  // expands each dir in order
   async function expandDirs(dirs: string[]) {
-    const target = dirs[dirs.length - 1];
-    const s = scope.value;
-    if (s && target && !isWithin(target, s.path)) scope.value = null;
-    const inScope = scope.value;
     for (const dir of dirs) {
-      if (inScope && !isWithin(dir, inScope.path)) continue;
       const n = node(dir);
       if (!n.open) {
         await load(dir);
@@ -188,25 +167,12 @@ export function useFileTree(openFile: (path: string) => void) {
     for (const n of nodes.value.values()) n.open = false;
   }
 
+  // a pin is a clean workspace: everything else closes, then the chain from
+  // the drive down to the pinned folder opens so its parents can be held
   async function pinClick(pin: Pin) {
-    // pins act as clean workspaces: reclicking the active pin collapses
-    // everything; switching pins starts the new scope from a clean slate
-    if (scope.value?.path === pin.path) {
-      collapseAll();
-      clearScope();
-      return;
-    }
     collapseAll();
-    scope.value = pin;
-    await load(pin.path);
-    node(pin.path).open = true;
+    await revealDir(pin.path);
     refreshPinCount(pin.path);
-    version.value++;
-  }
-
-  function clearScope() {
-    scope.value = null;
-    version.value++;
   }
 
   // re-read a directory after something inside it changed
@@ -285,25 +251,6 @@ export function useFileTree(openFile: (path: string) => void) {
     void version.value;
     void currentPath.value;
     const out: TreeRow[] = [];
-    const s = scope.value;
-    if (s) {
-      const drive = driveOf(s.path);
-      if (drive) {
-        // collapsed drive row doubles as the way back to the full tree
-        out.push({
-          path: drive.path,
-          name: drive.name,
-          label: drive.name,
-          kind: "drive",
-          depth: 0,
-          guides: 0,
-          open: false,
-          selected: false,
-        });
-      }
-      walk(s.path, s.name, "folder", drive ? 1 : 0, out);
-      return out;
-    }
     for (const d of roots.value) walk(d.path, d.name, "drive", 0, out);
     return out;
   });
@@ -311,7 +258,6 @@ export function useFileTree(openFile: (path: string) => void) {
   return {
     rows,
     pins,
-    scope,
     init,
     toggle,
     reveal,
@@ -322,7 +268,6 @@ export function useFileTree(openFile: (path: string) => void) {
     movePin,
     isPinned,
     pinClick,
-    clearScope,
     refresh,
     resync,
     openFile,
