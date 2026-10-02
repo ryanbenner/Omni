@@ -90,8 +90,16 @@ export function useFileTree(openFile: (path: string) => void) {
   async function toggle(path: string) {
     const n = node(path);
     if (!n.open) await load(path);
+    else closeInside(path);
     n.open = !n.open;
     version.value++;
+  }
+
+  // everything open inside a folder closes with it, so reopening starts clean
+  function closeInside(path: string) {
+    const sep = path.includes("\\") ? "\\" : "/";
+    const prefix = path.endsWith(sep) ? path : path + sep;
+    for (const [p, n] of nodes.value) if (p !== path && p.startsWith(prefix)) n.open = false;
   }
 
   // expands each dir in order
