@@ -81,6 +81,10 @@ const win = getCurrentWindow();
   width: 1em;
   text-align: left;
 }
+.tb-gear {
+  /* the two tree/settings buttons sit closer than the brand does */
+  margin-left: -5px;
+}
 .tb-icon:hover,
 .tb-icon.active {
   background: var(--color-neutral-900);
