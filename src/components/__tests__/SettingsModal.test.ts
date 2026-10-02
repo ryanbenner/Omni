@@ -157,7 +157,7 @@ describe("SettingsModal", () => {
     w.unmount();
   });
 
-  it("Exit without saving reverts and continues; Apply applies and continues", async () => {
+  it("Don't Save reverts and continues; Apply applies and continues", async () => {
     const onClose = vi.fn();
     const w = mount(SettingsModal, { attachTo: document.body, props: { onClose } });
     await w.findAll("[role=switch]")[2].trigger("click");

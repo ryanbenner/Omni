@@ -26,9 +26,9 @@ function onBackdrop(e: Event) {
         <i class="ph ph-x" />
       </button>
       <p class="dialog-title">Unsaved changes</p>
-      <p class="dialog-body">Apply your changes before leaving?</p>
+      <p class="dialog-body">Your changes will be lost unless you apply them.</p>
       <div class="dialog-actions">
-        <button class="btn-revert" @click="emit('discard')">Exit without saving</button>
+        <button class="btn-revert" @click="emit('discard')">Don't Save</button>
         <button ref="applyBtn" class="btn-apply" @click="emit('apply')">Apply</button>
       </div>
     </div>
@@ -45,7 +45,6 @@ function onBackdrop(e: Event) {
 }
 .unsaved-settings .btn-apply,
 .unsaved-settings .btn-revert {
-  width: 120px;
-  padding: 0;
+  min-width: 96px;
 }
 </style>
