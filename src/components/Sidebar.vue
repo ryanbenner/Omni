@@ -168,7 +168,7 @@ async function stackClick(row: TreeRow) {
   scrollRowTo(row.path, 0);
 }
 
-// the pin list folds to a single line when a pin is opened; the caret brings it back
+// the pin list stays open until its caret folds it
 const pinsOpen = ref(true);
 
 async function rowClick(row: TreeRow) {
@@ -284,7 +284,6 @@ async function pinClick(pin: Pin) {
     dragMoved = false;
     return;
   }
-  pinsOpen.value = false;
   await tree.pinClick(pin);
   await nextTick();
   // the pin's row scrolls just out of view so it tops the stack with its
