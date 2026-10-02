@@ -16,6 +16,7 @@
         "width": 1280,
         "height": 800,
         "decorations": false,
+        "backgroundColor": "#0e0f10",
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
       }
     ],
