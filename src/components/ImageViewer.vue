@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { MediaItem, ViewerAction } from "../types";
@@ -7,9 +7,10 @@ import { useImageTransform } from "../composables/useImageTransform";
 import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { onEscape } from "../composables/dialogStack";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
-const emit = defineEmits<{ navigate: [dir: -1 | 1]; collage: [] }>();
+const emit = defineEmits<{ navigate: [dir: -1 | 1]; collage: []; deleteFile: [] }>();
 
 function navClick(dir: -1 | 1, e: MouseEvent) {
   emit("navigate", dir);
@@ -154,6 +155,37 @@ function handleAction(action: ViewerAction): boolean {
   }
 }
 
+// delete asks in a small popover above the trash icon; a press anywhere
+// else or escape closes it with nothing done
+const confirmOpen = ref(false);
+let offConfirmEscape: (() => void) | null = null;
+function closeConfirm() {
+  confirmOpen.value = false;
+  window.removeEventListener("pointerdown", closeConfirm);
+  offConfirmEscape?.();
+  offConfirmEscape = null;
+}
+function requestDelete() {
+  if (!settings.general.confirmDelete) {
+    emit("deleteFile");
+    return;
+  }
+  confirmOpen.value = true;
+  window.addEventListener("pointerdown", closeConfirm);
+  offConfirmEscape = onEscape(closeConfirm);
+}
+function confirmDelete() {
+  closeConfirm();
+  emit("deleteFile");
+}
+// the pill swallows pointerdown so the context menu closes without the
+// window listener; a press on any other pill button still closes the confirm
+function onPillDown(e: PointerEvent) {
+  menu.value = null;
+  if (!(e.target as Element).closest(".confirm-wrap")) closeConfirm();
+}
+onUnmounted(closeConfirm);
+
 defineExpose({ handleAction });
 </script>
 
@@ -201,7 +233,18 @@ defineExpose({ handleAction });
     >
       <i class="ph ph-caret-right" />
     </button>
-    <div v-if="!failed" class="pill" @pointerdown.stop="menu = null">
+    <div v-if="!failed" class="pill" @pointerdown.stop="onPillDown">
+      <span class="confirm-wrap">
+        <button class="pill-btn" data-tip="Delete file" @click="requestDelete">
+          <i class="ph ph-trash" />
+        </button>
+        <div v-if="confirmOpen" class="confirm-pop">
+          <span class="confirm-text">Are you sure?</span>
+          <button class="btn-yes" @click="confirmDelete">Yes</button>
+          <button class="btn-no" @click="closeConfirm">No</button>
+        </div>
+      </span>
+      <span class="pill-div" />
       <button class="pill-btn" data-tip="Zoom out" @click="t.zoomBy(1 / zoomStep)">
         <i class="ph ph-magnifying-glass-minus" />
       </button>
