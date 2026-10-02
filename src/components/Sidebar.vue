@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -35,16 +35,11 @@ const root = ref<HTMLElement | null>(null);
 // the file in the middle; stepping through a folder afterwards moves the minimum
 let firstReveal = true;
 
-// the folder whose chain is held at the top: the open file's folder, or the
-// pinned folder last opened
-const heldFolder = ref<string | null>(null);
-
 watch(
   () => props.currentPath,
   async (p) => {
     tree.setCurrent(p);
     if (p) {
-      heldFolder.value = parentDir(p);
       await tree.reveal(p);
       await nextTick();
       const block = firstReveal ? "center" : "nearest";
@@ -61,7 +56,6 @@ watch(
   () => props.revealFolder,
   async (dir) => {
     if (!dir) return;
-    heldFolder.value = dir;
     await tree.revealDir(dir);
     await nextTick();
     // the folder at the top, so its files read down from it
@@ -115,64 +109,67 @@ onUnmounted(() => {
   closeConfirm();
 });
 
-// the drive, the parent of the open file's folder and that folder itself hold
-// at the top while the tree scrolls, stacked in order; a row that is closed
-// drops back into the tree
 const ROW_H = 26;
-function persistTop(row: TreeRow): number | null {
-  if (row.kind === "drive") return 0;
-  if (row.kind !== "folder" || !row.open) return null;
-  const cur = heldFolder.value;
-  if (!cur) return null;
-  const parent = parentDir(cur);
-  const parentIsDrive = parentDir(parent) === parent;
-  if (row.path === parent && !parentIsDrive) return ROW_H;
-  if (row.path === cur) return parentIsDrive ? ROW_H : 2 * ROW_H;
-  return null;
+function scroller(): HTMLElement | null {
+  return root.value?.querySelector<HTMLElement>(".scroll") ?? null;
 }
 
-const held = computed(() =>
-  tree.rows.value
-    .map((r, i) => ({ i, path: r.path, top: persistTop(r) }))
-    .filter((h): h is { i: number; path: string; top: number } => h.top !== null),
-);
-
-// scrolls a row to sit right under the held rows above it (a closed held
-// folder, or a pinned folder whose contents should start under its own row)
-function scrollUnderHeld(path: string) {
-  const i = tree.rows.value.findIndex((r) => r.path === path);
-  const el = root.value?.querySelectorAll<HTMLElement>(".tree-row")[i];
-  const scroller = root.value?.querySelector<HTMLElement>(".scroll");
-  if (i < 0 || !el || !scroller) return;
-  const above = held.value.filter((h) => h.i < i).length * ROW_H;
-  scroller.scrollBy(0, el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - above);
-}
-
-// a held row only changes its look once it is actually pinned at the top:
-// full width, no indent, and a line under the lowest one. css cannot tell
-// a stuck row from one in its natural place, so the scroll handler does
-const stuck = ref(new Set<string>());
-const stuckLast = ref<string | null>(null);
-function updateStuck() {
-  const scroller = root.value?.querySelector<HTMLElement>(".scroll");
-  if (!scroller) return;
-  const next = new Set<string>();
-  let last: string | null = null;
-  if (scroller.scrollTop > 0) {
-    const top = scroller.getBoundingClientRect().top;
-    const els = scroller.querySelectorAll<HTMLElement>(".tree-row");
-    for (const h of held.value) {
-      const el = els[h.i];
-      if (el && el.getBoundingClientRect().top <= top + h.top + 0.5) {
-        next.add(h.path);
-        last = h.path;
-      }
+// the open folders enclosing the first row visible in the tree, drive first:
+// shown as a stack above the tree once they have scrolled out of view, like
+// an editor's sticky scroll. the stack takes its own space above the tree so
+// the row at the top edge is never covered and the chain never flips
+const stack = ref<TreeRow[]>([]);
+function chainAbove(i: number, includeSelf: boolean): TreeRow[] {
+  const rows = tree.rows.value;
+  const out: TreeRow[] = [];
+  const self = rows[i];
+  if (!self) return out;
+  let need = self.depth - 1;
+  if (includeSelf && self.kind !== "file" && self.open) out.push(self);
+  for (let j = i - 1; j >= 0 && need >= 0; j--) {
+    const r = rows[j];
+    if (r.kind !== "file" && r.depth === need) {
+      out.unshift(r);
+      need--;
     }
   }
-  if ([...next].join("\0") !== [...stuck.value].join("\0")) stuck.value = next;
-  if (last !== stuckLast.value) stuckLast.value = last;
+  return out;
 }
-watch(held, () => nextTick(updateStuck));
+function updateStack() {
+  const el = scroller();
+  const first = el?.querySelector<HTMLElement>(".tree-row");
+  let next: TreeRow[] = [];
+  if (el && first) {
+    // rows are a fixed height, so the row at the top edge is arithmetic
+    const start = first.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    const hidden = Math.max(0, -start);
+    const i = Math.min(Math.floor(hidden / ROW_H), tree.rows.value.length - 1);
+    next = chainAbove(i, hidden > i * ROW_H);
+  }
+  if (next.map((r) => r.path).join("\0") !== stack.value.map((r) => r.path).join("\0")) {
+    stack.value = next;
+  }
+}
+watch(tree.rows, () => nextTick(updateStack));
+
+// puts a row's top edge `y` px below the top of the tree
+function scrollRowTo(path: string, y: number) {
+  const i = tree.rows.value.findIndex((r) => r.path === path);
+  const el = scroller();
+  const rowEl = el?.querySelectorAll<HTMLElement>(".tree-row")[i];
+  if (i < 0 || !el || !rowEl) return;
+  el.scrollBy(0, rowEl.getBoundingClientRect().top - el.getBoundingClientRect().top - y);
+}
+
+// closing a folder from the stack leaves it as the first row under the rest
+async function stackClick(row: TreeRow) {
+  await tree.toggle(row.path);
+  await nextTick();
+  scrollRowTo(row.path, 0);
+}
+
+// the pin list folds to a single line when a pin is opened; the caret brings it back
+const pinsOpen = ref(true);
 
 async function rowClick(row: TreeRow) {
   if (row.kind === "file") {
@@ -184,12 +181,7 @@ async function rowClick(row: TreeRow) {
     emit("openFile", row.path);
     return;
   }
-  const wasHeld = row.kind === "folder" && persistTop(row) !== null;
   await tree.toggle(row.path);
-  if (wasHeld) {
-    await nextTick();
-    scrollUnderHeld(row.path);
-  }
 }
 
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
@@ -292,11 +284,12 @@ async function pinClick(pin: Pin) {
     dragMoved = false;
     return;
   }
-  heldFolder.value = pin.path;
+  pinsOpen.value = false;
   await tree.pinClick(pin);
   await nextTick();
-  // the pin's contents start right under its own held row
-  scrollUnderHeld(pin.path);
+  // the pin's row scrolls just out of view so it tops the stack with its
+  // contents right under
+  scrollRowTo(pin.path, -ROW_H);
 }
 
 function slotAt(y: number): number {
@@ -448,9 +441,13 @@ async function deleteFile(path: string) {
 
 <template>
   <aside class="sidebar" ref="root">
-    <div class="scroll" :style="{ '--held': held.length * ROW_H + 'px' }" @scroll.passive="updateStuck">
-      <template v-if="tree.pins.value.length">
-        <div class="section-label">PINNED</div>
+    <div v-if="tree.pins.value.length" class="pins">
+      <div class="pins-head" :class="pinsOpen ? 'open' : 'closed'" @click="pinsOpen = !pinsOpen">
+        <i class="ph caret" :class="pinsOpen ? 'ph-caret-down' : 'ph-caret-right'" />
+        <i v-if="!pinsOpen" class="ph ph-push-pin pin-icon" />
+        <span class="row-name">{{ pinsOpen ? "PINNED" : "Pinned" }}</span>
+      </div>
+      <div v-if="pinsOpen" class="pins-list">
         <template v-for="(p, i) in tree.pins.value" :key="p.path">
           <div v-if="drag?.active && drag.to === i && isMove(drag)" class="drop-bar" />
           <div
@@ -469,21 +466,29 @@ async function deleteFile(path: string) {
           v-if="drag?.active && drag.to === tree.pins.value.length && isMove(drag)"
           class="drop-bar"
         />
-        <div class="section-divider" />
-      </template>
-
+      </div>
+    </div>
+    <div v-if="stack.length" class="stack">
+      <div
+        v-for="row in stack"
+        :key="row.path"
+        class="stack-row"
+        :title="row.name"
+        @click="stackClick(row)"
+        @contextmenu="onRowContext($event, row)"
+      >
+        <i class="ph caret ph-caret-down" />
+        <i class="ph folder-icon" :class="row.kind === 'drive' ? 'ph-hard-drive' : 'ph-folder-open'" />
+        <span class="row-name">{{ row.name }}</span>
+      </div>
+    </div>
+    <div class="scroll" @scroll.passive="updateStack">
       <div class="section-label">THIS PC</div>
       <div
         v-for="row in tree.rows.value"
         :key="row.path"
         class="tree-row"
-        :class="{
-          selected: row.selected,
-          persist: persistTop(row) !== null,
-          stuck: stuck.has(row.path),
-          'stuck-last': stuckLast === row.path,
-        }"
-        :style="persistTop(row) !== null ? { top: persistTop(row) + 'px' } : undefined"
+        :class="{ selected: row.selected }"
         :title="row.name"
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
@@ -633,16 +638,59 @@ async function deleteFile(path: string) {
   color: var(--color-neutral-600);
   padding: 6px 8px 4px;
 }
-.section-divider {
-  height: 1px;
-  margin: 10px 8px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-neutral-900) 20%,
-    var(--color-neutral-900) 80%,
-    transparent
-  );
+/* pins sit above the tree so the stack rests flush under their line */
+.pins {
+  flex: none;
+  border-bottom: 1px solid var(--color-neutral-900);
+}
+.pins-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.pins-head.open {
+  padding: 14px 16px 4px 14px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--color-neutral-600);
+}
+.pins-head.open .caret {
+  color: inherit;
+  width: auto;
+}
+.pins-head.closed {
+  height: 26px;
+  padding: 0 6px 0 12px;
+  font-size: 13px;
+  color: var(--color-neutral-300);
+}
+.pins-head.closed:hover {
+  background: var(--color-neutral-900);
+}
+.pins-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0 8px 10px;
+}
+/* open folders enclosing the top of the view, drive first */
+.stack {
+  flex: none;
+  border-bottom: 1px solid var(--color-neutral-900);
+}
+.stack-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px 0 12px;
+  font-size: 13px;
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+.stack-row:hover {
+  background: var(--color-neutral-900);
 }
 .pin-row {
   display: flex;
@@ -712,32 +760,12 @@ async function deleteFile(path: string) {
   color: var(--color-neutral-700);
   font-variant-numeric: tabular-nums;
 }
-/* held rows stack at the top while the tree scrolls */
-.tree-row.persist {
-  position: sticky;
-  z-index: 1;
-  background: #121315;
-}
-/* once pinned at the top: edge to edge, no indent, a line under the stack */
-.tree-row.stuck {
-  margin: 0 -8px;
-  padding-left: 12px;
-  border-radius: 0;
-}
-.tree-row.stuck .guide {
-  display: none;
-}
-.tree-row.stuck-last {
-  box-shadow: 0 1px 0 var(--color-neutral-900);
-}
 .tree-row {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   height: 26px;
-  /* scrollIntoView lands below the held rows instead of under them */
-  scroll-margin-top: var(--held, 0px);
   padding: 0 6px 0 4px;
   border-radius: 5px;
   cursor: pointer;

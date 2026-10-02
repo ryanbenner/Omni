@@ -128,10 +128,15 @@ describe("Sidebar pin drag", () => {
     await fire(w, rows[1].element, "pointerup", { clientY: 40 });
     await fire(w, rows[1].element, "click", {  });
     await flushPromises();
-    expect(names(w)).toEqual(["A", "B", "C"]);
-    // the pin opens the chain down to it: the drive and the folder row appear
+    // the pin opens the chain down to it and folds the pin list to one line
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "A", "B", "C"]);
-    expect(w.findAll(".tree-row")[2].classes()).toContain("persist");
+    expect(w.find(".pins-head").classes()).toContain("closed");
+    expect(w.find(".pins-list").exists()).toBe(false);
+    // the caret brings the list back in its usual look
+    await w.find(".pins-head").trigger("click");
+    expect(w.find(".pins-head").classes()).toContain("open");
+    expect(w.find(".pins-head").text()).toBe("PINNED");
+    expect(names(w)).toEqual(["A", "B", "C"]);
   });
 
   it("the click that ends a drag does not open the pin", async () => {
@@ -373,83 +378,73 @@ describe("Sidebar reveal folder", () => {
     w.unmount();
   });
 
-  it("the drive, the parent folder and the current folder stay put with stacked offsets", async () => {
+  // jsdom has no layout: place the tree's first row `hidden` px above the top edge
+  function scrolledBy(w: ReturnType<typeof mount>, hidden: number) {
+    (w.find(".scroll").element as HTMLElement).getBoundingClientRect = () => ({ top: 28 }) as DOMRect;
+    (w.find(".tree-row").element as HTMLElement).getBoundingClientRect = () =>
+      ({ top: 28 - hidden }) as DOMRect;
+  }
+  const stackNames = (w: ReturnType<typeof mount>) => w.findAll(".stack-row").map((r) => r.text());
+
+  it("the open folders above the first visible row stack over the tree, drive first", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
       attachTo: document.body,
     });
     await flushPromises();
-    const tops = () =>
-      w.findAll(".tree-row").map((r) =>
-        r.classes().includes("persist") ? (r.element as HTMLElement).style.top : null,
-      );
     expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual([
       "C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg",
     ]);
-    expect(tops()).toEqual(["0px", "26px", "52px", null, null, null]);
-    // a file straight under a drive child: the folder sits right below the drive
-    await w.setProps({ currentPath: "C:\\Pics\\a.jpg", currentFolder: "C:\\Pics" });
-    await flushPromises();
-    expect(tops()).toEqual(["0px", "26px", null, null, null, null]);
+    expect(w.find(".stack").exists()).toBe(false);
+    // rows C:, Pics and part of Sub are above the edge: all three stack
+    scrolledBy(w, 60);
+    await w.find(".scroll").trigger("scroll");
+    expect(stackNames(w)).toEqual(["C:", "Pics", "Sub"]);
+    // a.jpg at the edge: Sub has ended, only C: and Pics enclose it
+    scrolledBy(w, 26 * 4);
+    await w.find(".scroll").trigger("scroll");
+    expect(stackNames(w)).toEqual(["C:", "Pics"]);
+    // the drive row exactly at the edge is still visible: nothing stacks
+    scrolledBy(w, 0);
+    await w.find(".scroll").trigger("scroll");
+    expect(w.find(".stack").exists()).toBe(false);
     w.unmount();
   });
 
-  it("closing a persistent folder drops it out and scrolls it to just under the rest", async () => {
+  it("clicking a stacked folder closes it, and what was inside, and scrolls it to the top", async () => {
     Element.prototype.scrollBy = vi.fn();
     const w = mount(Sidebar, {
       props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
       attachTo: document.body,
     });
     await flushPromises();
-    const rows = w.findAll(".tree-row");
-    (w.find(".scroll").element as HTMLElement).getBoundingClientRect = () => ({ top: 28 }) as DOMRect;
-    (rows[2].element as HTMLElement).getBoundingClientRect = () => ({ top: 80 }) as DOMRect;
-    await rows[2].trigger("click"); // collapse Sub
+    scrolledBy(w, 60);
+    await w.find(".scroll").trigger("scroll");
+    await w.findAll(".stack-row")[1].trigger("click"); // Pics
     await flushPromises();
-    expect(w.findAll(".tree-row")[2].classes()).not.toContain("persist");
-    // 80 - 28 = 52 below the scroll top; the drive and Pics still occupy 52
-    expect(Element.prototype.scrollBy).toHaveBeenCalledWith(0, 0);
-    await w.findAll(".tree-row")[1].trigger("click"); // collapse Pics, stuck under the drive
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics"]);
+    expect(Element.prototype.scrollBy).toHaveBeenCalled();
+    await w.findAll(".tree-row")[1].trigger("click"); // reopen Pics: Sub stayed closed
     await flushPromises();
-    expect(w.findAll(".tree-row").map((r) => r.classes().includes("persist"))).toEqual([true, false]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual([
+      "C:", "Pics", "Sub", "a.jpg", "b.jpg",
+    ]);
     w.unmount();
   });
 
-  it("opening a pin holds the drive, its parent and the pin, with its contents right under", async () => {
-    Element.prototype.scrollBy = vi.fn();
+  it("opening a pin reveals its chain and scrolls its row just out of view", async () => {
+    const scrollBy = vi.fn();
+    Element.prototype.scrollBy = scrollBy;
     localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Pics\\Sub", name: "Sub", count: 0 }]));
     const w = mount(Sidebar, { props: { currentPath: null, currentFolder: null }, attachTo: document.body });
     await flushPromises();
     await w.find(".pin-row").trigger("click");
     await flushPromises();
-    const rows = w.findAll(".tree-row");
-    expect(rows.map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg"]);
-    expect(rows.map((r) => (r.element as HTMLElement).style.top)).toEqual(["0px", "26px", "52px", "", "", ""]);
-    expect(Element.prototype.scrollBy).toHaveBeenCalled();
-    w.unmount();
-  });
-
-  it("rows pinned at the top get the stuck look, the lowest one carrying the line", async () => {
-    const w = mount(Sidebar, {
-      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
-      attachTo: document.body,
-    });
-    await flushPromises();
-    const scroller = w.find(".scroll").element as HTMLElement;
-    expect(scroller.style.getPropertyValue("--held")).toBe("78px");
-    const rows = w.findAll(".tree-row");
-    scroller.getBoundingClientRect = () => ({ top: 28 }) as DOMRect;
-    const tops = [28, 54, 200];
-    rows.slice(0, 3).forEach((r, i) => {
-      (r.element as HTMLElement).getBoundingClientRect = () => ({ top: tops[i] }) as DOMRect;
-    });
-    Object.defineProperty(scroller, "scrollTop", { value: 120, configurable: true });
-    await w.find(".scroll").trigger("scroll");
-    const cls = () => w.findAll(".tree-row").slice(0, 3).map((r) => [r.classes().includes("stuck"), r.classes().includes("stuck-last")]);
-    expect(cls()).toEqual([[true, false], [true, true], [false, false]]);
-    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
-    await w.find(".scroll").trigger("scroll");
-    expect(cls()).toEqual([[false, false], [false, false], [false, false]]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual([
+      "C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg",
+    ]);
+    // rects are all zero in jsdom, so the move is just the requested -26 offset
+    expect(scrollBy).toHaveBeenLastCalledWith(0, 26);
     w.unmount();
   });
 
