@@ -369,7 +369,14 @@ watch(speedMenuOpen, (open) => {
 });
 
 
-const showBadge = computed(() => !playing.value && !failed.value);
+// a brief badge with the icon of the action just taken; it fades over 0.2 s
+const badge = ref<"play" | "pause" | null>(null);
+let flashTimer = 0;
+function flashBadge(kind: "play" | "pause") {
+  badge.value = kind;
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => (badge.value = null), 200);
+}
 
 // on-screen ten second skips clamp at the clip edges and never change files
 function seekTen(dir: -1 | 1) {
@@ -396,6 +403,7 @@ onUnmounted(() => {
   clearTimeout(holdTimer);
   clearTimeout(hideTimer);
   clearTimeout(toastTimer);
+  clearTimeout(flashTimer);
   window.removeEventListener("pointerdown", closeSpeedMenu);
 });
 
@@ -447,7 +455,11 @@ function togglePlay() {
       el.currentTime = trim.inSec.value;
     }
     el.play().catch(() => {});
-  } else el.pause();
+    flashBadge("play");
+  } else {
+    el.pause();
+    flashBadge("pause");
+  }
 }
 
 function seekBy(seconds: number) {
@@ -579,10 +591,10 @@ const progress = computed(() =>
         @pointerleave="endHold"
         @click="onVideoClick"
       />
-      <div v-if="showBadge" class="badge-layer">
-        <button class="play-badge" title="Play (Space)" @click="togglePlay">
-          <i class="ph-fill ph-play" />
-        </button>
+      <div v-if="badge" class="badge-layer">
+        <div :key="badge" class="play-badge" :class="badge">
+          <i class="ph-fill" :class="badge === 'play' ? 'ph-play' : 'ph-pause'" />
+        </div>
       </div>
       <template v-if="!naming && !trim.active.value">
         <button
@@ -773,14 +785,21 @@ const progress = computed(() =>
   border: 1px solid var(--color-accent-700);
   color: var(--color-accent-200);
   box-shadow: 0 0 40px color-mix(in oklab, var(--color-accent) 30%, transparent);
-  pointer-events: auto;
-  cursor: pointer;
   font-size: 26px;
+  animation: badge-fade 0.2s ease-out forwards;
+}
+.play-badge.play {
   padding-left: 3px;
 }
-.play-badge:hover {
-  border-color: var(--color-accent);
-  background: #1d1f22cc;
+@keyframes badge-fade {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.15);
+  }
 }
 .nav-arrow {
   position: absolute;

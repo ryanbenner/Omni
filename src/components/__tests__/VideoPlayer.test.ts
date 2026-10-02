@@ -179,3 +179,45 @@ describe("VideoPlayer volume bar", () => {
     expect(el.volume).toBeCloseTo(0.3);
   });
 });
+
+describe("VideoPlayer play/pause flash", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    loadSettings();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("a paused video shows no badge until something toggles it", () => {
+    const { w } = mountPlayer(true);
+    expect(w.find(".play-badge").exists()).toBe(false);
+  });
+
+  it("starting playback flashes the play icon and it is gone after 200 ms", async () => {
+    const { w, el } = mountPlayer(true);
+    await w.find(".play-btn").trigger("click");
+    expect(el.play).toHaveBeenCalledOnce();
+    const badge = w.find(".play-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.find("i").classes()).toContain("ph-play");
+    vi.advanceTimersByTime(199);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(true);
+    vi.advanceTimersByTime(1);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(false);
+  });
+
+  it("pausing flashes the pause icon, and a click on the video flashes too", async () => {
+    const { w, el, pause } = mountPlayer(false);
+    await w.find(".play-btn").trigger("click");
+    expect(pause).toHaveBeenCalledOnce();
+    expect(w.find(".play-badge i").classes()).toContain("ph-pause");
+    vi.advanceTimersByTime(200);
+    await w.vm.$nextTick();
+    expect(w.find(".play-badge").exists()).toBe(false);
+    Object.defineProperty(el, "paused", { value: true, configurable: true });
+    await w.find("video").trigger("click");
+    expect(w.find(".play-badge i").classes()).toContain("ph-play");
+  });
+});
