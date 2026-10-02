@@ -30,6 +30,10 @@ tree.init().then(() => {
 
 const root = ref<HTMLElement | null>(null);
 
+// the first reveal after mounting (launch, or the tree shown mid-session) lands
+// the file in the middle; stepping through a folder afterwards moves the minimum
+let firstReveal = true;
+
 watch(
   () => props.currentPath,
   async (p) => {
@@ -37,7 +41,9 @@ watch(
     if (p) {
       await tree.reveal(p);
       await nextTick();
-      root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
+      const block = firstReveal ? "center" : "nearest";
+      firstReveal = false;
+      root.value?.querySelector(".tree-row.selected")?.scrollIntoView({ block });
     }
   },
   { immediate: true },
@@ -51,8 +57,9 @@ watch(
     if (!dir) return;
     await tree.revealDir(dir);
     await nextTick();
+    // the folder at the top, so its files read down from it
     const i = tree.rows.value.findIndex((r) => r.path === dir);
-    if (i >= 0) root.value?.querySelectorAll(".tree-row")[i]?.scrollIntoView({ block: "nearest" });
+    if (i >= 0) root.value?.querySelectorAll(".tree-row")[i]?.scrollIntoView({ block: "start" });
     emit("folderRevealed");
   },
   { immediate: true },

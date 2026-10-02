@@ -265,23 +265,41 @@ describe("Sidebar reveal folder", () => {
         if (args?.path === "C:\\Pics")
           return Promise.resolve({
             folders: [],
-            files: [{ path: "C:\\Pics\\a.jpg", kind: "image", name: "a.jpg", mtime: 1, size: 0 }],
+            files: [
+              { path: "C:\\Pics\\a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 },
+              { path: "C:\\Pics\\b.jpg", kind: "image", name: "b.jpg", mtime: 1, size: 0 },
+            ],
           });
       }
       return Promise.reject(`unexpected ${cmd} ${args?.path}`);
     });
   });
 
-  it("expands the folder, scrolls to it and emits folderRevealed", async () => {
+  it("expands the folder, scrolls it to the top and emits folderRevealed", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: null, currentFolder: null, revealFolder: "C:\\Pics" },
       attachTo: document.body,
     });
     await flushPromises();
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg", "b.jpg"]);
     expect(w.findAll(".tree-row.selected")).toHaveLength(0);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "start" });
     expect(w.emitted("folderRevealed")).toHaveLength(1);
+    w.unmount();
+  });
+
+  it("the first file reveal centers the file; later ones scroll the minimum", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\b.jpg", currentFolder: "C:\\Pics" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.find(".tree-row.selected").attributes("title")).toBe("b.jpg");
+    expect(Element.prototype.scrollIntoView).toHaveBeenLastCalledWith({ block: "center" });
+    await w.setProps({ currentPath: "C:\\Pics\\a.jpg" });
+    await flushPromises();
+    expect(w.find(".tree-row.selected").attributes("title")).toBe("a.jpg");
+    expect(Element.prototype.scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
     w.unmount();
   });
 
@@ -293,7 +311,7 @@ describe("Sidebar reveal folder", () => {
     await flushPromises();
     await w.setProps({ revealFolder: "C:\\Pics" });
     await flushPromises();
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg"]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg", "b.jpg"]);
     expect(w.emitted("folderRevealed")).toHaveLength(1);
     w.unmount();
   });
