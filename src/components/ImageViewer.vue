@@ -344,6 +344,14 @@ defineExpose({ handleAction });
   display: block;
   line-height: 1;
 }
+.pill-btn i::before {
+  /* windows measures the glyph run narrower than it paints, which pushed
+     the icon right of center; an explicit 1em box aligned to its left edge
+     keeps layout and paint in step */
+  display: block;
+  width: 1em;
+  text-align: left;
+}
 .pill-btn:hover {
   background: var(--color-accent-900);
   color: var(--color-accent-200);

@@ -73,6 +73,14 @@ const win = getCurrentWindow();
   display: block;
   line-height: 1;
 }
+.tb-icon i::before {
+  /* windows measures the glyph run narrower than it paints, which pushed
+     the icon right of center; an explicit 1em box aligned to its left edge
+     keeps layout and paint in step */
+  display: block;
+  width: 1em;
+  text-align: left;
+}
 .tb-icon:hover,
 .tb-icon.active {
   background: var(--color-neutral-900);
