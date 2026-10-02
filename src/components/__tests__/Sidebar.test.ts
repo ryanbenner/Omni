@@ -240,13 +240,64 @@ describe("Sidebar delete", () => {
     w.unmount();
   });
 
-  it("asks first when confirmation is on", async () => {
-    vi.mocked(ask).mockResolvedValue(false);
+  it("asks in a pill above the row when confirmation is on and deletes only on Yes", async () => {
+    const w = await openMenuOnA();
+    const row = w.findAll(".tree-row")[1].element as HTMLElement;
+    row.getBoundingClientRect = () => ({ left: 12, top: 100 }) as DOMRect;
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
+    expect(w.find(".context-menu").exists()).toBe(false);
+    const pop = w.find(".confirm-pop");
+    expect(pop.text()).toContain("Are you sure?");
+    expect((pop.element as HTMLElement).style.left).toBe("20px");
+    expect((pop.element as HTMLElement).style.bottom).toBe(`${window.innerHeight - 100 + 4}px`);
+    expect(ask).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
+    await pop.find(".btn-no").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
+    await w.find(".confirm-pop .btn-yes").trigger("click");
+    await flushPromises();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("delete_file", { path: "C:\\a.jpg" });
+    expect(w.emitted("fileDeleted")).toEqual([["C:\\a.jpg"]]);
+    w.unmount();
+  });
+
+  it("a press elsewhere or Escape closes the pill with no action", async () => {
     const w = await openMenuOnA();
     await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
-    await flushPromises();
-    expect(ask).toHaveBeenCalledOnce();
+    window.dispatchEvent(new Event("pointerdown"));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
     expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
+    w.unmount();
+  });
+});
+
+describe("Sidebar pin context menu", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    document.body.innerHTML = "";
+    wire();
+  });
+
+  it("right-clicking a pinned row offers Unpin folder and removes the pin", async () => {
+    const w = await mountWithPins();
+    await w.findAll(".pin-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    const entry = w.findAll(".menu-item").find((m) => m.text() === "Unpin folder");
+    expect(entry).toBeDefined();
+    await entry!.trigger("click");
+    expect(names(w)).toEqual(["A", "C"]);
+    expect(w.find(".context-menu").exists()).toBe(false);
     w.unmount();
   });
 });
@@ -262,9 +313,14 @@ describe("Sidebar reveal folder", () => {
       if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
       if (cmd === "read_dir_entries") {
         if (args?.path === "C:\\") return Promise.resolve({ folders: [{ path: "C:\\Pics", name: "Pics" }], files: [] });
-        if (args?.path === "C:\\Pics")
+        if (args?.path === "C:\\Pics\\Sub")
           return Promise.resolve({
             folders: [],
+            files: [{ path: "C:\\Pics\\Sub\\x.jpg", kind: "image", name: "x.jpg", mtime: 3, size: 0 }],
+          });
+        if (args?.path === "C:\\Pics")
+          return Promise.resolve({
+            folders: [{ path: "C:\\Pics\\Sub", name: "Sub" }],
             files: [
               { path: "C:\\Pics\\a.jpg", kind: "image", name: "a.jpg", mtime: 2, size: 0 },
               { path: "C:\\Pics\\b.jpg", kind: "image", name: "b.jpg", mtime: 1, size: 0 },
@@ -281,7 +337,7 @@ describe("Sidebar reveal folder", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg", "b.jpg"]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "Sub", "a.jpg", "b.jpg"]);
     expect(w.findAll(".tree-row.selected")).toHaveLength(0);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "start" });
     expect(w.emitted("folderRevealed")).toHaveLength(1);
@@ -303,14 +359,45 @@ describe("Sidebar reveal folder", () => {
     w.unmount();
   });
 
-  it("drive rows carry the sticky class; folders and files do not", async () => {
+  it("the drive, the parent folder and the current folder stay put with stacked offsets", async () => {
     const w = mount(Sidebar, {
-      props: { currentPath: null, currentFolder: null, revealFolder: "C:\\Pics" },
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const tops = () =>
+      w.findAll(".tree-row").map((r) =>
+        r.classes().includes("persist") ? (r.element as HTMLElement).style.top : null,
+      );
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual([
+      "C:", "Pics", "Sub", "x.jpg", "a.jpg", "b.jpg",
+    ]);
+    expect(tops()).toEqual(["0px", "26px", "52px", null, null, null]);
+    // a file straight under a drive child: the folder sits right below the drive
+    await w.setProps({ currentPath: "C:\\Pics\\a.jpg", currentFolder: "C:\\Pics" });
+    await flushPromises();
+    expect(tops()).toEqual(["0px", "26px", null, null, null, null]);
+    w.unmount();
+  });
+
+  it("closing a persistent folder drops it out and scrolls it to just under the rest", async () => {
+    Element.prototype.scrollBy = vi.fn();
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
       attachTo: document.body,
     });
     await flushPromises();
     const rows = w.findAll(".tree-row");
-    expect(rows.map((r) => r.classes().includes("drive"))).toEqual([true, false, false, false]);
+    (w.find(".scroll").element as HTMLElement).getBoundingClientRect = () => ({ top: 28 }) as DOMRect;
+    (rows[2].element as HTMLElement).getBoundingClientRect = () => ({ top: 80 }) as DOMRect;
+    await rows[2].trigger("click"); // collapse Sub
+    await flushPromises();
+    expect(w.findAll(".tree-row")[2].classes()).not.toContain("persist");
+    // 80 - 28 = 52 below the scroll top; the drive and Pics still occupy 52
+    expect(Element.prototype.scrollBy).toHaveBeenCalledWith(0, 0);
+    await w.findAll(".tree-row")[1].trigger("click"); // collapse Pics, stuck under the drive
+    await flushPromises();
+    expect(w.findAll(".tree-row").map((r) => r.classes().includes("persist"))).toEqual([true, false]);
     w.unmount();
   });
 
@@ -322,7 +409,7 @@ describe("Sidebar reveal folder", () => {
     await flushPromises();
     await w.setProps({ revealFolder: "C:\\Pics" });
     await flushPromises();
-    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "a.jpg", "b.jpg"]);
+    expect(w.findAll(".tree-row").map((r) => r.attributes("title"))).toEqual(["C:", "Pics", "Sub", "a.jpg", "b.jpg"]);
     expect(w.emitted("folderRevealed")).toHaveLength(1);
     w.unmount();
   });

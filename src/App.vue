@@ -309,7 +309,7 @@ function onClipSaved(path: string) {
   sidebar.value?.refreshDir(parentDir(path));
 }
 
-// the player confirms beside its trash icon; by the time this runs the user said yes
+// the viewer confirms beside its trash icon; by the time this runs the user said yes
 async function deleteCurrent() {
   const cur = list.current.value;
   if (!cur) return;

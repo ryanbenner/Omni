@@ -57,3 +57,58 @@ describe("ImageViewer zoom step", () => {
     expect(w.find(".pill-pct").text()).toBe("105%");
   });
 });
+
+describe("ImageViewer delete", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+    document.body.innerHTML = "";
+  });
+
+  it("has a trash button first in the pill, followed by a divider", () => {
+    const w = mount(ImageViewer, { props: { item } });
+    const pill = w.find(".pill").element;
+    const first = pill.children[0];
+    expect(first.querySelector(".pill-btn[data-tip='Delete file'] .ph-trash")).not.toBeNull();
+    expect(pill.children[1].classList.contains("pill-div")).toBe(true);
+  });
+
+  it("asks in a popover and emits deleteFile only on Yes", async () => {
+    const w = mount(ImageViewer, { props: { item }, attachTo: document.body });
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    expect(w.find(".confirm-pop").text()).toContain("Are you sure?");
+    expect(w.emitted("deleteFile")).toBeUndefined();
+    await w.find(".confirm-pop .btn-no").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    await w.find(".confirm-pop .btn-yes").trigger("click");
+    expect(w.emitted("deleteFile")).toHaveLength(1);
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("a press elsewhere, another pill button, or Escape closes it with no action", async () => {
+    const w = mount(ImageViewer, { props: { item }, attachTo: document.body });
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    window.dispatchEvent(new Event("pointerdown"));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    await w.find(".pill-btn[data-tip='Zoom in']").trigger("pointerdown");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.vm.$nextTick();
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(w.emitted("deleteFile")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("deletes at once when confirmation is off", async () => {
+    settings.general.confirmDelete = false;
+    const w = mount(ImageViewer, { props: { item } });
+    await w.find(".pill-btn[data-tip='Delete file']").trigger("click");
+    expect(w.find(".confirm-pop").exists()).toBe(false);
+    expect(w.emitted("deleteFile")).toHaveLength(1);
+  });
+});

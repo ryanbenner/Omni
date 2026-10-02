@@ -34,6 +34,7 @@ defineExpose({ handleAction });
     :item="item"
     :has-prev="hasPrev"
     :has-next="hasNext"
+    @delete-file="$emit('deleteFile')"
     @navigate="$emit('navigate', $event)"
     @collage="$emit('collage')"
   />
