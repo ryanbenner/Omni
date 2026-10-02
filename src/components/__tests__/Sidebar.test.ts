@@ -411,6 +411,25 @@ describe("Sidebar reveal folder", () => {
     w.unmount();
   });
 
+  it("with the pin list open, a THIS PC heading stays above the stack", async () => {
+    localStorage.setItem("mv-pins", JSON.stringify([{ path: "C:\\Pics", name: "Pics", count: 0 }]));
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(w.find(".head-label").exists()).toBe(false);
+    scrolledBy(w, 60);
+    await w.find(".scroll").trigger("scroll");
+    expect(w.find(".head-label").text()).toBe("THIS PC");
+    expect(w.find(".pins").classes()).toContain("open");
+    await w.find(".pins-head").trigger("click"); // fold the list: heading goes with it
+    expect(w.find(".head-label").exists()).toBe(false);
+    expect(w.find(".pins").classes()).not.toContain("open");
+    expect(stackNames(w)).toEqual(["C:", "Pics", "Sub"]);
+    w.unmount();
+  });
+
   it("clicking a stacked folder closes it, and what was inside, and scrolls it to the top", async () => {
     Element.prototype.scrollBy = vi.fn();
     const w = mount(Sidebar, {

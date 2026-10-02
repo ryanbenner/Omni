@@ -441,7 +441,7 @@ async function deleteFile(path: string) {
 
 <template>
   <aside class="sidebar" ref="root">
-    <div v-if="tree.pins.value.length" class="pins">
+    <div v-if="tree.pins.value.length" class="pins" :class="{ open: pinsOpen }">
       <div class="pins-head" :class="pinsOpen ? 'open' : 'closed'" @click="pinsOpen = !pinsOpen">
         <i class="ph caret" :class="pinsOpen ? 'ph-caret-down' : 'ph-caret-right'" />
         <i v-if="!pinsOpen" class="ph ph-push-pin pin-icon" />
@@ -468,6 +468,7 @@ async function deleteFile(path: string) {
         />
       </div>
     </div>
+    <div v-if="pinsOpen && stack.length" class="section-label head-label">THIS PC</div>
     <div v-if="stack.length" class="stack">
       <div
         v-for="row in stack"
@@ -638,10 +639,17 @@ async function deleteFile(path: string) {
   color: var(--color-neutral-600);
   padding: 6px 8px 4px;
 }
-/* pins sit above the tree so the stack rests flush under their line */
+/* pins sit above the tree; the open list ends in a line, the folded row does not */
 .pins {
   flex: none;
+}
+.pins.open {
   border-bottom: 1px solid var(--color-neutral-900);
+}
+/* with the pin list open, the tree's heading stays put above the stack */
+.head-label {
+  flex: none;
+  padding: 14px 16px 4px;
 }
 .pins-head {
   display: flex;
