@@ -303,6 +303,17 @@ describe("Sidebar reveal folder", () => {
     w.unmount();
   });
 
+  it("drive rows carry the sticky class; folders and files do not", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: null, currentFolder: null, revealFolder: "C:\\Pics" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const rows = w.findAll(".tree-row");
+    expect(rows.map((r) => r.classes().includes("drive"))).toEqual([true, false, false, false]);
+    w.unmount();
+  });
+
   it("a folder set after mount is revealed too", async () => {
     const w = mount(Sidebar, {
       props: { currentPath: null, currentFolder: null, revealFolder: null },

@@ -383,7 +383,7 @@ async function deleteFromMenu() {
         v-for="row in tree.rows.value"
         :key="row.path"
         class="tree-row"
-        :class="{ selected: row.selected }"
+        :class="{ selected: row.selected, drive: row.kind === 'drive' }"
         :title="row.name"
         @click="rowClick(row)"
         @contextmenu="onRowContext($event, row)"
@@ -596,6 +596,13 @@ async function deleteFromMenu() {
   font-size: 11px;
   color: var(--color-neutral-700);
   font-variant-numeric: tabular-nums;
+}
+/* the drive row holds at the top while the tree scrolls, so one click closes it */
+.tree-row.drive {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #121315;
 }
 .tree-row {
   position: relative;
