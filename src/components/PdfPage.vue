@@ -45,7 +45,16 @@ function makeLayer(a: Ref<HTMLCanvasElement | null>, b: Ref<HTMLCanvasElement | 
         at.value = region.scale;
         release((front.value === 0 ? b : a).value);
       })
-      .catch((e) => console.warn(`pdf page ${props.page} render failed`, e));
+      .catch((e) => {
+        // a genuine failure (not a cancellation, which never rejects here)
+        // must clear job/requested too, or the dedup guard above would
+        // swallow every later request for this same region forever
+        if (job === j) {
+          job = null;
+          requested = null;
+        }
+        console.warn(`pdf page ${props.page} render failed`, e);
+      });
   }
 
   function clear() {

@@ -9,6 +9,7 @@ interface Job {
   region: RenderRegion;
   dpr: number;
   resolve: () => void;
+  reject: (e: Error) => void;
   cancel: Mock<() => void>;
 }
 
@@ -20,8 +21,12 @@ function fakeHandle() {
     close: vi.fn(),
     render: vi.fn((n: number, canvas: HTMLCanvasElement, region: RenderRegion, dpr: number) => {
       let resolve!: () => void;
-      const done = new Promise<void>((r) => (resolve = r));
-      const job: Job = { n, canvas, region, dpr, resolve, cancel: vi.fn() };
+      let reject!: (e: Error) => void;
+      const done = new Promise<void>((r, j) => {
+        resolve = r;
+        reject = j;
+      });
+      const job: Job = { n, canvas, region, dpr, resolve, reject, cancel: vi.fn() };
       jobs.push(job);
       return { done, cancel: job.cancel };
     }),
@@ -165,5 +170,22 @@ describe("PdfPage", () => {
     expect(jobs[0].cancel).toHaveBeenCalled();
     expect(jobs[1].cancel).toHaveBeenCalled();
     for (const c of canvases) expect(c.width).toBe(0);
+  });
+
+  it("retries a region after its render rejected", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { handle, jobs } = fakeHandle();
+    const slice = { x: 0, y: 0, w: 300, h: 400 };
+    const w = mount(PdfPage, {
+      props: { handle, page: 1, box: box(3), scale: 3, baseScale: 1, settled: { scale: 3, slice }, dpr: 1 },
+    });
+    await w.vm.$nextTick();
+    jobs[1].reject(new Error("boom"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(warn).toHaveBeenCalled();
+    await w.setProps({ settled: { scale: 3, slice: { ...slice } } });
+    expect(jobs).toHaveLength(3);
+    expect(jobs[2].region).toEqual({ scale: 3, ...slice });
+    warn.mockRestore();
   });
 });
