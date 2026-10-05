@@ -4,7 +4,7 @@ import { resolveKey, resolveKeyUp, type Command } from "../keymap";
 const k = (key: string, shiftKey = false) => ({ key, shiftKey });
 
 describe("resolveKey", () => {
-  it("pgup/pgdn always navigate files regardless of kind", () => {
+  it("pgup/pgdn navigate files on images and videos", () => {
     expect(resolveKey(k("PageUp"), "video")).toEqual({
       target: "app",
       action: { type: "prevFile" },
@@ -172,5 +172,44 @@ describe("collage keys", () => {
   it("c on an image enters collage mode", () => {
     expect(resolveKey(c("c"), "image")).toEqual(viewer("enterCollage"));
     expect(resolveKey(c("c"), "video")).toBeNull();
+  });
+});
+
+describe("pdf keys", () => {
+  it("pages with pgup/pgdn and home/end, files with arrows", () => {
+    expect(resolveKey(k("PageUp"), "pdf")).toEqual({
+      target: "viewer",
+      action: { type: "pageStep", pages: -1 },
+    });
+    expect(resolveKey(k("PageDown"), "pdf")).toEqual({
+      target: "viewer",
+      action: { type: "pageStep", pages: 1 },
+    });
+    expect(resolveKey(k("Home"), "pdf")).toEqual({
+      target: "viewer",
+      action: { type: "pageJump", to: "first" },
+    });
+    expect(resolveKey(k("End"), "pdf")).toEqual({
+      target: "viewer",
+      action: { type: "pageJump", to: "last" },
+    });
+    expect(resolveKey(k("ArrowLeft"), "pdf")).toEqual({
+      target: "app",
+      action: { type: "prevFile" },
+    });
+    expect(resolveKey(k("ArrowRight"), "pdf")).toEqual({
+      target: "app",
+      action: { type: "nextFile" },
+    });
+  });
+
+  it("f fits, 0 resets, and keys from other kinds do nothing", () => {
+    expect(resolveKey(k("f"), "pdf")).toEqual({ target: "viewer", action: { type: "fit" } });
+    expect(resolveKey(k("0"), "pdf")).toEqual({ target: "viewer", action: { type: "resetZoom" } });
+    expect(resolveKey(k("r"), "pdf")).toBeNull();
+    expect(resolveKey(k("c"), "pdf")).toBeNull();
+    expect(resolveKey(k("ArrowDown"), "pdf")).toBeNull();
+    expect(resolveKey(k(" "), "pdf")).toBeNull();
+    expect(resolveKeyUp(k("<"), "pdf")).toBeNull();
   });
 });

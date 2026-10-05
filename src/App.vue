@@ -219,8 +219,9 @@ async function openFile(path: string) {
     return;
   }
   if (collageOpen.value) {
-    const isVideo = ["mp4", "mkv", "mov"].includes(ext);
-    if (!isVideo) {
+    // videos and pdfs have no place on the wall, so they leave it
+    const leavesWall = ["mp4", "mkv", "mov", "pdf"].includes(ext);
+    if (!leavesWall) {
       await wall.value?.addPaths([path]);
       return;
     }

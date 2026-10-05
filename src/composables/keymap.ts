@@ -43,7 +43,29 @@ export function resolveKey(
     return null;
   }
 
-  // both remaining kinds
+  if (kind === "pdf") {
+    switch (key) {
+      case "ArrowLeft":
+        return { target: "app", action: { type: "prevFile" } };
+      case "ArrowRight":
+        return { target: "app", action: { type: "nextFile" } };
+      case "PageUp":
+        return { target: "viewer", action: { type: "pageStep", pages: -1 } };
+      case "PageDown":
+        return { target: "viewer", action: { type: "pageStep", pages: 1 } };
+      case "Home":
+        return { target: "viewer", action: { type: "pageJump", to: "first" } };
+      case "End":
+        return { target: "viewer", action: { type: "pageJump", to: "last" } };
+      case "f":
+        return { target: "viewer", action: { type: "fit" } };
+      case "0":
+        return { target: "viewer", action: { type: "resetZoom" } };
+    }
+    return null;
+  }
+
+  // image and video
   if (key === "PageUp") return { target: "app", action: { type: "prevFile" } };
   if (key === "PageDown") return { target: "app", action: { type: "nextFile" } };
 

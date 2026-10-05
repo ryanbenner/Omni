@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { defineAsyncComponent, ref } from "vue";
 import type { MediaItem, ViewerAction } from "../types";
 import VideoPlayer from "./VideoPlayer.vue";
 import ImageViewer from "./ImageViewer.vue";
+
+// pdf.js is only fetched the first time a pdf opens
+const PdfViewer = defineAsyncComponent(() => import("./PdfViewer.vue"));
 
 defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean; showName?: boolean }>();
 defineEmits<{ deleteFile: []; clipSaved: [path: string]; navigate: [dir: -1 | 1]; collage: [] }>();
@@ -26,6 +29,14 @@ defineExpose({ handleAction });
     :show-name="showName"
     @delete-file="$emit('deleteFile')"
     @clip-saved="$emit('clipSaved', $event)"
+    @navigate="$emit('navigate', $event)"
+  />
+  <PdfViewer
+    v-else-if="item.kind === 'pdf'"
+    ref="child"
+    :item="item"
+    :has-prev="hasPrev"
+    :has-next="hasNext"
     @navigate="$emit('navigate', $event)"
   />
   <ImageViewer

@@ -599,7 +599,9 @@ async function deleteFile(path: string) {
                   ? 'ph-film-slate'
                   : row.mediaKind === 'collage'
                     ? 'ph-images'
-                    : 'ph-image'
+                    : row.mediaKind === 'pdf'
+                      ? 'ph-file-pdf'
+                      : 'ph-image'
               "
               :style="{
                 color:

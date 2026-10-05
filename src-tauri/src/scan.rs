@@ -6,6 +6,7 @@ const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "mov"];
 const IMAGE_EXTS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic"];
 // omni's own layout file; listed in the tree, never a next/prev neighbor
 const COLLAGE_EXTS: &[&str] = &["collage"];
+const PDF_EXTS: &[&str] = &["pdf"];
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +33,8 @@ pub fn kind_for(path: &Path) -> Option<&'static str> {
         Some("image")
     } else if COLLAGE_EXTS.contains(&ext.as_str()) {
         Some("collage")
+    } else if PDF_EXTS.contains(&ext.as_str()) {
+        Some("pdf")
     } else {
         None
     }
@@ -142,6 +145,8 @@ mod tests {
         assert_eq!(kind_for(Path::new("a.jpeg")), Some("image"));
         assert_eq!(kind_for(Path::new("a.heic")), Some("image"));
         assert_eq!(kind_for(Path::new("wall.collage")), Some("collage"));
+        assert_eq!(kind_for(Path::new("a.pdf")), Some("pdf"));
+        assert_eq!(kind_for(Path::new("a.PDF")), Some("pdf"));
         assert_eq!(kind_for(Path::new("a.txt")), None);
         assert_eq!(kind_for(Path::new("noext")), None);
     }
@@ -155,6 +160,17 @@ mod tests {
         let out = scan_media(pic.to_string_lossy().into_owned(), false).unwrap();
         assert_eq!(out.items.len(), 1);
         assert_eq!(out.items[0].name, "a.jpg");
+    }
+
+    #[test]
+    fn scan_lists_pdfs_as_their_own_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        File::create(dir.path().join("doc.pdf")).unwrap();
+        File::create(dir.path().join("photo.jpg")).unwrap();
+        let launched = dir.path().join("doc.pdf");
+        let result = scan_media(launched.to_string_lossy().into_owned(), false).unwrap();
+        assert_eq!(result.items.len(), 2);
+        assert_eq!(result.items[result.start_index].kind, "pdf");
     }
 
     #[test]
