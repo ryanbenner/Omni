@@ -1,4 +1,4 @@
-export type MediaKind = "video" | "image" | "collage";
+export type MediaKind = "video" | "image" | "collage" | "pdf";
 
 export interface MediaItem {
   path: string;
@@ -29,6 +29,9 @@ export type ViewerAction =
   | { type: "setIn" }
   | { type: "setOut" }
   | { type: "exitTrim" }
+  // pdf
+  | { type: "pageStep"; pages: 1 | -1 }
+  | { type: "pageJump"; to: "first" | "last" }
   // collage wall
   | { type: "toggleLock" }
   | { type: "removeSelected" }
@@ -41,7 +44,7 @@ export type ViewerAction =
   | { type: "exitCollage" }
   | { type: "enterCollage" };
 
-export type StageKind = "video" | "image" | "collage";
+export type StageKind = "video" | "image" | "collage" | "pdf";
 
 export type AppAction = { type: "prevFile" } | { type: "nextFile" };
 
