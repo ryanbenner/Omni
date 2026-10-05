@@ -188,4 +188,18 @@ describe("PdfPage", () => {
     expect(jobs[2].region).toEqual({ scale: 3, ...slice });
     warn.mockRestore();
   });
+
+  it("caps the base canvas at 16 megapixels and lets the detail sharpen the view", async () => {
+    const { handle, jobs } = fakeHandle();
+    const huge = { top: 0, left: 0, w: 10000, h: 10000 };
+    const slice = { x: 0, y: 0, w: 800, h: 600 };
+    const w = mount(PdfPage, {
+      props: { handle, page: 1, box: huge, scale: 1, baseScale: 1, settled: { scale: 1, slice }, dpr: 2 },
+    });
+    await w.vm.$nextTick();
+    const r = jobs[0].region;
+    expect(r.w * r.h * 2 * 2).toBeLessThanOrEqual(16e6 * 1.01);
+    expect(r.w / r.h).toBeCloseTo(1);
+    expect(jobs[1].region).toEqual({ scale: 1, ...slice });
+  });
 });

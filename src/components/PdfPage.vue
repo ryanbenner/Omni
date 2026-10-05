@@ -83,6 +83,7 @@ function sameRegion(a: RenderRegion, b: RenderRegion): boolean {
 const base = makeLayer(baseA, baseB);
 const detail = makeLayer(detailA, detailB);
 
+const BASE_MAX_PX = 16e6;
 const pagePts = computed(() => ({ w: props.box.w / props.scale, h: props.box.h / props.scale }));
 
 // decides what each layer should show for the settled view; runs after mount
@@ -92,12 +93,16 @@ function sync() {
   if (!settled) return;
   // the base covers the whole page at fit resolution, or less when zoomed
   // out so many small pages stay cheap; small changes keep what it has
-  const res = Math.min(props.baseScale, settled.scale);
+  let res = Math.min(props.baseScale, settled.scale);
+  // a page far larger than page 1 would blow past canvas size limits; the
+  // detail layer sharpens the visible slice of a capped base
+  const area = pagePts.value.w * pagePts.value.h * res * res * props.dpr * props.dpr;
+  if (area > BASE_MAX_PX) res *= Math.sqrt(BASE_MAX_PX / area);
   if (base.rect.value === null || res > base.at.value * 1.01 || res < base.at.value / 2) {
     base.render({ scale: res, x: 0, y: 0, w: pagePts.value.w * res, h: pagePts.value.h * res });
   }
   const slice = settled.slice;
-  if (settled.scale <= props.baseScale || !slice) {
+  if (settled.scale <= res || !slice) {
     detail.clear();
     return;
   }
