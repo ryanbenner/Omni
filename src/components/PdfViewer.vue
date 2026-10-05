@@ -364,7 +364,7 @@ defineExpose({ handleAction });
 </script>
 
 <template>
-  <div ref="container" class="pdf-viewer">
+  <div ref="container" class="pdf-viewer" @wheel="onWheel">
     <div v-if="error" class="pdf-error">
       <p>Couldn't display {{ item.name }}.</p>
       <p class="hint">{{ error }}</p>
@@ -375,7 +375,6 @@ defineExpose({ handleAction });
       class="scroller"
       tabindex="-1"
       @scroll="onScroll"
-      @wheel="onWheel"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"

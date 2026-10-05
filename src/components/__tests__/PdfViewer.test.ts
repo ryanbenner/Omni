@@ -255,6 +255,11 @@ describe("PdfViewer zoom", () => {
     await flushPromises();
     expect(ctrl.defaultPrevented).toBe(true);
     expect(pct(w)).toBe("110%");
+    // over the pill too, or the webview would zoom the whole ui
+    const overPill = new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, cancelable: true, bubbles: true });
+    w.find(".pill").element.dispatchEvent(overPill);
+    await flushPromises();
+    expect(overPill.defaultPrevented).toBe(true);
   });
 
   it("fit and resetZoom return to 100%", async () => {
