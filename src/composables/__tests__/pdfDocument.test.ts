@@ -41,7 +41,11 @@ describe("openPdf", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const h = await openPdf(bytes);
     expect(workerOptions.workerSrc).toBe("worker.mjs");
-    expect(getDocument).toHaveBeenCalledWith({ data: bytes });
+    expect(getDocument).toHaveBeenCalledWith(expect.objectContaining({ data: bytes, cMapPacked: true }));
+    const src = getDocument.mock.calls[0][0] as Record<string, string>;
+    for (const key of ["wasmUrl", "cMapUrl", "standardFontDataUrl"]) {
+      expect(src[key]).toMatch(/\/pdfjs\/[a-z_]+\/$/);
+    }
     expect(h.pageCount).toBe(3);
   });
 

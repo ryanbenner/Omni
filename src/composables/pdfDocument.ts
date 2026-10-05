@@ -28,7 +28,16 @@ export interface PdfHandle {
 
 export async function openPdf(data: Uint8Array): Promise<PdfHandle> {
   GlobalWorkerOptions.workerSrc = workerUrl;
-  const loading: PDFDocumentLoadingTask = getDocument({ data });
+  // decoders, cmaps and fonts ship beside the app (see vite.config.ts); pdf.js
+  // needs each url to end with a slash
+  const base = new URL("pdfjs/", document.baseURI).href;
+  const loading: PDFDocumentLoadingTask = getDocument({
+    data,
+    wasmUrl: base + "wasm/",
+    cMapUrl: base + "cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: base + "standard_fonts/",
+  });
   const doc = await loading.promise;
   const pages = new Map<number, Promise<PDFPageProxy>>();
   function getPage(n: number): Promise<PDFPageProxy> {
