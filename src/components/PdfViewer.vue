@@ -11,6 +11,8 @@ import {
   fitScale,
   layout,
   pageSlice,
+  scrollForThumb,
+  thumb,
   visibleRange,
   wheelZoomFactor,
   zoomAt,
@@ -162,6 +164,46 @@ function onPointerMove(e: PointerEvent) {
 }
 function onPointerUp() {
   drag = null;
+}
+
+// ---- overlay bars ----
+const H_TRACK_FRAC = 0.6;
+const hTrack = computed(() => viewport.value.w * H_TRACK_FRAC);
+const vTrack = computed(() => Math.max(0, viewport.value.h - 24));
+const showH = computed(() => lay.value.width > viewport.value.w + 0.5);
+const showV = computed(() => lay.value.height > viewport.value.h + 0.5);
+const hThumb = computed(() => thumb(scrollLeft.value, viewport.value.w, lay.value.width, hTrack.value));
+const vThumb = computed(() => thumb(scrollTop.value, viewport.value.h, lay.value.height, vTrack.value));
+
+type Axis = "x" | "y";
+let barDrag: { axis: Axis; start: number; offset: number } | null = null;
+function applyBar(axis: Axis, offset: number) {
+  if (axis === "x") {
+    setScroll(scrollForThumb(offset, viewport.value.w, lay.value.width, hTrack.value), scrollTop.value);
+  } else {
+    setScroll(scrollLeft.value, scrollForThumb(offset, viewport.value.h, lay.value.height, vTrack.value));
+  }
+}
+// a press on the thumb grabs it; a press on the track jumps the thumb's center there and grabs it
+function onBarDown(axis: Axis, e: PointerEvent) {
+  if (e.button !== 0) return;
+  const track = e.currentTarget as HTMLElement;
+  const rect = track.getBoundingClientRect();
+  const t = axis === "x" ? hThumb.value : vThumb.value;
+  const pos = axis === "x" ? e.clientX - rect.left : e.clientY - rect.top;
+  const onThumb = pos >= t.offset && pos <= t.offset + t.len;
+  const offset = onThumb ? t.offset : pos - t.len / 2;
+  if (!onThumb) applyBar(axis, offset);
+  barDrag = { axis, start: axis === "x" ? e.clientX : e.clientY, offset };
+  track.setPointerCapture?.(e.pointerId);
+}
+function onBarMove(e: PointerEvent) {
+  if (!barDrag) return;
+  const d = (barDrag.axis === "x" ? e.clientX : e.clientY) - barDrag.start;
+  applyBar(barDrag.axis, barDrag.offset + d);
+}
+function onBarUp() {
+  barDrag = null;
 }
 
 // ---- loading ----
@@ -334,6 +376,28 @@ defineExpose({ handleAction });
     >
       <i class="ph ph-caret-right" />
     </button>
+    <div
+      v-if="!error && showV"
+      class="vbar"
+      :style="{ height: vTrack + 'px' }"
+      @pointerdown.stop="onBarDown('y', $event)"
+      @pointermove="onBarMove"
+      @pointerup="onBarUp"
+      @pointercancel="onBarUp"
+    >
+      <div class="thumb" :style="{ top: vThumb.offset + 'px', height: vThumb.len + 'px' }" />
+    </div>
+    <div
+      v-if="!error && showH"
+      class="hbar"
+      :style="{ width: hTrack + 'px' }"
+      @pointerdown.stop="onBarDown('x', $event)"
+      @pointermove="onBarMove"
+      @pointerup="onBarUp"
+      @pointercancel="onBarUp"
+    >
+      <div class="thumb" :style="{ left: hThumb.offset + 'px', width: hThumb.len + 'px' }" />
+    </div>
     <div v-if="!error" class="pill" @pointerdown.stop @click="refocus">
       <button class="pill-btn" data-tip="Zoom out" @click="zoomBy(1 / zoomStep)">
         <i class="ph ph-magnifying-glass-minus" />
@@ -425,6 +489,44 @@ defineExpose({ handleAction });
 }
 .nav-next {
   right: 14px;
+}
+.hbar,
+.vbar {
+  position: absolute;
+  z-index: 6;
+  border-radius: 7px;
+  background: #17181ad9;
+  border: 1px solid var(--color-neutral-900);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+.hbar {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 72px;
+  height: 14px;
+}
+.vbar {
+  right: 8px;
+  top: 12px;
+  width: 10px;
+}
+.thumb {
+  position: absolute;
+  border-radius: 5px;
+  background: var(--color-neutral-700);
+}
+.hbar .thumb {
+  top: 2px;
+  bottom: 2px;
+}
+.vbar .thumb {
+  left: 2px;
+  right: 2px;
+}
+.hbar:hover .thumb,
+.vbar:hover .thumb {
+  background: var(--color-accent-400);
 }
 .pill {
   position: absolute;

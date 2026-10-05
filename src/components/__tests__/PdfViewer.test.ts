@@ -250,3 +250,63 @@ describe("PdfViewer navigation", () => {
     w.unmount();
   });
 });
+
+describe("PdfViewer bars", () => {
+  it("shows the horizontal bar only when the column is wider than the viewport", async () => {
+    const w = await mountViewer();
+    expect(w.find(".hbar").exists()).toBe(false);
+    expect(w.find(".vbar").exists()).toBe(true);
+    await w.find(".pill-btn[data-tip='Zoom in']").trigger("click");
+    await flushPromises();
+    expect(w.find(".hbar").exists()).toBe(true);
+    expect((w.find(".hbar").element as HTMLElement).style.width).toBe(VP.w * 0.6 + "px");
+    expect(exposed(w).handleAction({ type: "fit" })).toBe(true);
+    await flushPromises();
+    expect(w.find(".hbar").exists()).toBe(false);
+  });
+
+  it("sizes the vertical thumb to the visible fraction and moves it with the scroll", async () => {
+    const w = await mountViewer();
+    const el = scroller(w);
+    const thumbEl = () => w.find(".vbar .thumb").element as HTMLElement;
+    const contentH = parseFloat((w.find(".content").element as HTMLElement).style.height);
+    const track = VP.h - 24;
+    expect(parseFloat(thumbEl().style.height)).toBeCloseTo((track * VP.h) / contentH);
+    expect(thumbEl().style.top).toBe("0px");
+    el.scrollTop = contentH - VP.h;
+    el.dispatchEvent(new Event("scroll"));
+    await flushPromises();
+    expect(parseFloat(thumbEl().style.top)).toBeCloseTo(track - parseFloat(thumbEl().style.height));
+  });
+
+  it("dragging the horizontal thumb scrolls sideways; a track press jumps there", async () => {
+    const w = await mountViewer();
+    const el = scroller(w);
+    for (let i = 0; i < 8; i++) await w.find(".pill-btn[data-tip='Zoom in']").trigger("click");
+    await flushPromises();
+    const contentW = parseFloat((w.find(".content").element as HTMLElement).style.width);
+    expect(contentW).toBeGreaterThan(VP.w);
+    el.scrollLeft = 0;
+    el.dispatchEvent(new Event("scroll"));
+    await flushPromises();
+    const bar = w.find(".hbar");
+    const thumbW = parseFloat((w.find(".hbar .thumb").element as HTMLElement).style.width);
+    // the thumb starts at the track's left edge (the stub rect puts the track at x=0)
+    bar.element.dispatchEvent(
+      new PointerEvent("pointerdown", { button: 0, clientX: thumbW / 2, clientY: 0, pointerId: 2, bubbles: true, cancelable: true }),
+    );
+    bar.element.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: thumbW / 2 + 60, clientY: 0, pointerId: 2, bubbles: true, cancelable: true }),
+    );
+    const track = VP.w * 0.6;
+    expect(el.scrollLeft).toBeCloseTo((60 / (track - thumbW)) * (contentW - VP.w));
+    bar.element.dispatchEvent(new PointerEvent("pointerup", { pointerId: 2, bubbles: true, cancelable: true }));
+
+    const before = el.scrollLeft;
+    bar.element.dispatchEvent(
+      new PointerEvent("pointerdown", { button: 0, clientX: track - 1, clientY: 0, pointerId: 3, bubbles: true, cancelable: true }),
+    );
+    expect(el.scrollLeft).toBeGreaterThan(before);
+    expect(el.scrollLeft).toBeCloseTo(contentW - VP.w);
+  });
+});
