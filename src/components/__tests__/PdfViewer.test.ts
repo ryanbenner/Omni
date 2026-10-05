@@ -371,6 +371,19 @@ describe("PdfViewer navigation", () => {
 });
 
 describe("PdfViewer bars", () => {
+  it("a bar press keeps keyboard focus on the scroller", async () => {
+    const w = await mountViewer(fakeHandle(), {}, true);
+    const bar = w.find(".vbar").element as HTMLElement;
+    // jsdom never moves focus on a press, so start from the body as a real press would leave it
+    scroller(w).blur();
+    const down = new PointerEvent("pointerdown", { button: 0, clientY: 10, pointerId: 1, bubbles: true, cancelable: true });
+    bar.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    bar.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+    expect(document.activeElement).toBe(scroller(w));
+    w.unmount();
+  });
+
   it("shows the horizontal bar only when the column is wider than the viewport", async () => {
     const w = await mountViewer();
     expect(w.find(".hbar").exists()).toBe(false);

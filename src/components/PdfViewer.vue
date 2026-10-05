@@ -201,6 +201,9 @@ function applyBar(axis: Axis, offset: number) {
 // a press on the thumb grabs it; a press on the track jumps the thumb's center there and grabs it
 function onBarDown(axis: Axis, e: PointerEvent) {
   if (e.button !== 0) return;
+  // the bars are not focusable, so a press would hand focus to the body and
+  // stop keyboard scrolling
+  e.preventDefault();
   const track = e.currentTarget as HTMLElement;
   const rect = track.getBoundingClientRect();
   const t = axis === "x" ? hThumb.value : vThumb.value;
@@ -218,6 +221,7 @@ function onBarMove(e: PointerEvent) {
 }
 function onBarUp() {
   barDrag = null;
+  refocus();
 }
 
 // ---- loading ----
