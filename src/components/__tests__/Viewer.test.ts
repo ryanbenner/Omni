@@ -5,6 +5,21 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
   convertFileSrc: (p: string) => `asset://${p}`,
 }));
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  readFile: vi.fn(() => Promise.resolve(new Uint8Array())),
+  writeFile: vi.fn(),
+  rename: vi.fn(),
+}));
+vi.mock("../../composables/pdfDocument", () => ({
+  openPdf: vi.fn(() =>
+    Promise.resolve({
+      pageCount: 1,
+      pageSize: () => Promise.resolve({ w: 612, h: 792 }),
+      render: () => ({ done: Promise.resolve(), cancel() {} }),
+      close: () => Promise.resolve(),
+    }),
+  ),
+}));
 
 import Viewer from "../Viewer.vue";
 import type { MediaItem } from "../../types";
@@ -21,6 +36,13 @@ const imageItem: MediaItem = {
   kind: "image",
   name: "b.jpg",
   mtime: 2,
+  size: 0,
+};
+const pdfItem: MediaItem = {
+  path: "/f/c.pdf",
+  kind: "pdf",
+  name: "c.pdf",
+  mtime: 3,
   size: 0,
 };
 
@@ -64,5 +86,18 @@ describe("Viewer", () => {
     expect(next.attributes("disabled")).toBeUndefined();
     await next.trigger("click");
     expect(w.emitted("navigate")).toEqual([[1]]);
+  });
+
+  it("renders the async PdfViewer for pdfs and forwards its actions", async () => {
+    const w = mount(Viewer, { props: { item: pdfItem, hasPrev: true } });
+    // the async component's dynamic import needs real wall-clock time to
+    // transform on first load, not just microtask ticks, so poll for it
+    await vi.waitFor(() => expect(w.find(".pdf-viewer").exists()).toBe(true));
+    expect(w.find("img").exists()).toBe(false);
+    const exposed = w.vm as unknown as { handleAction: (a: { type: string; pages?: number }) => boolean };
+    expect(exposed.handleAction({ type: "pageStep", pages: 1 })).toBe(true);
+    expect(exposed.handleAction({ type: "rotate" })).toBe(false);
+    await w.find(".nav-arrow.nav-prev").trigger("click");
+    expect(w.emitted("navigate")).toEqual([[-1]]);
   });
 });

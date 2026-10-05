@@ -162,6 +162,19 @@ describe("App collage routing", () => {
     w.unmount();
   });
 
+  it("opening a pdf on the wall leaves the wall like a video does", async () => {
+    const w = await mountApp();
+    app(w).enterCollage([]);
+    await flushPromises();
+    await app(w).openFile("/p/d.pdf");
+    await flushPromises();
+    expect(wallSpies.requestLeave).toHaveBeenCalledWith(false);
+    expect(wallSpies.addPaths).not.toHaveBeenCalled();
+    expect(w.find(".wall-stub").exists()).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("scan_media", { path: "/p/d.pdf", showHidden: false });
+    w.unmount();
+  });
+
   it("closing the window with a dirty wall asks, and destroys only on yes", async () => {
     const w = await mountApp();
     app(w).enterCollage([]);
