@@ -135,7 +135,9 @@ describe("PdfViewer loading", () => {
   it("stops measuring the old document after a file switch", async () => {
     const slow = fakeHandle(40);
     let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
+    // the gate rejects, as a destroyed document's pageSize would, so the old
+    // catch-and-continue would otherwise race through every remaining page
+    const gate = new Promise<void>((_, reject) => (release = () => reject(new Error("destroyed"))));
     (slow.pageSize as ReturnType<typeof vi.fn>).mockImplementation(async (n: number) => {
       if (n > 1) await gate;
       return letter;
