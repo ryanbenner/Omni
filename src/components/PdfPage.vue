@@ -24,17 +24,22 @@ function makeLayer(a: Ref<HTMLCanvasElement | null>, b: Ref<HTMLCanvasElement | 
   const front = ref<0 | 1>(0);
   const rect = ref<Slice | null>(null);
   const at = ref(0);
+  // the device pixel ratio the shown picture was rendered at
+  const atDpr = ref(0);
   let job: RenderJob | null = null;
   let requested: RenderRegion | null = null;
+  let requestedDpr = 0;
 
   function render(region: RenderRegion) {
-    if (job && requested && sameRegion(requested, region)) return;
+    const dpr = props.dpr;
+    if (job && requested && requestedDpr === dpr && sameRegion(requested, region)) return;
     job?.cancel();
     const canvas = (front.value === 0 ? b : a).value;
     if (!canvas) return;
-    const j = props.handle.render(props.page, canvas, region, props.dpr);
+    const j = props.handle.render(props.page, canvas, region, dpr);
     job = j;
     requested = region;
+    requestedDpr = dpr;
     j.done
       .then(() => {
         if (job !== j) return;
@@ -43,6 +48,7 @@ function makeLayer(a: Ref<HTMLCanvasElement | null>, b: Ref<HTMLCanvasElement | 
         front.value = front.value === 0 ? 1 : 0;
         rect.value = { x: region.x, y: region.y, w: region.w, h: region.h };
         at.value = region.scale;
+        atDpr.value = dpr;
         release((front.value === 0 ? b : a).value);
       })
       .catch((e) => {
@@ -65,9 +71,10 @@ function makeLayer(a: Ref<HTMLCanvasElement | null>, b: Ref<HTMLCanvasElement | 
     release(b.value);
     rect.value = null;
     at.value = 0;
+    atDpr.value = 0;
   }
 
-  return { front, rect, at, render, clear };
+  return { front, rect, at, atDpr, render, clear };
 }
 
 function release(canvas: HTMLCanvasElement | null) {
@@ -98,7 +105,8 @@ function sync() {
   // detail layer sharpens the visible slice of a capped base
   const area = pagePts.value.w * pagePts.value.h * res * res * props.dpr * props.dpr;
   if (area > BASE_MAX_PX) res *= Math.sqrt(BASE_MAX_PX / area);
-  if (base.rect.value === null || res > base.at.value * 1.01 || res < base.at.value / 2) {
+  const baseStale = base.atDpr.value !== props.dpr || res > base.at.value * 1.01 || res < base.at.value / 2;
+  if (base.rect.value === null || baseStale) {
     base.render({ scale: res, x: 0, y: 0, w: pagePts.value.w * res, h: pagePts.value.h * res });
   }
   const slice = settled.slice;
@@ -106,7 +114,7 @@ function sync() {
     detail.clear();
     return;
   }
-  if (detail.at.value === settled.scale && detail.rect.value && sameRegion({ scale: settled.scale, ...detail.rect.value }, { scale: settled.scale, ...slice })) {
+  if (detail.at.value === settled.scale && detail.atDpr.value === props.dpr && detail.rect.value && sameRegion({ scale: settled.scale, ...detail.rect.value }, { scale: settled.scale, ...slice })) {
     return;
   }
   detail.render({ scale: settled.scale, ...slice });
@@ -115,7 +123,9 @@ function sync() {
 onMounted(sync);
 watch(() => [props.settled, props.baseScale, props.dpr] as const, sync, { flush: "post" });
 
-const detailVisible = computed(() => detail.rect.value !== null && detail.at.value === props.scale);
+const detailVisible = computed(
+  () => detail.rect.value !== null && detail.at.value === props.scale && detail.atDpr.value === props.dpr,
+);
 const detailStyle = computed(() => {
   const r = detail.rect.value;
   return r ? { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px" } : {};

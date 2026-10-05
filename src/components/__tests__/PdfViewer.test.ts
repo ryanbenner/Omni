@@ -169,6 +169,36 @@ describe("PdfViewer loading", () => {
   });
 });
 
+describe("PdfViewer pixel ratio", () => {
+  it("re-renders at the new ratio when the window moves to another display", async () => {
+    const lists: { media: string; fire: () => void; removed: boolean }[] = [];
+    vi.stubGlobal("matchMedia", (media: string) => {
+      let cb: (() => void) | null = null;
+      const entry = { media, fire: () => cb?.(), removed: false };
+      lists.push(entry);
+      return {
+        addEventListener: (_: string, f: () => void) => (cb = f),
+        removeEventListener: () => (entry.removed = true),
+      };
+    });
+    const ratio = vi.spyOn(window, "devicePixelRatio", "get").mockReturnValue(1);
+    const h = fakeHandle(3);
+    const w = await mountViewer(h);
+    expect(lists.map((l) => l.media)).toEqual(["(resolution: 1dppx)"]);
+    expect((h.render as ReturnType<typeof vi.fn>).mock.calls.every((c) => c[3] === 1)).toBe(true);
+    ratio.mockReturnValue(2);
+    lists[0].fire();
+    await flushPromises();
+    expect(lists[0].removed).toBe(true);
+    expect(lists[1].media).toBe("(resolution: 2dppx)");
+    expect((h.render as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[3] === 2)).toBe(true);
+    w.unmount();
+    expect(lists[1].removed).toBe(true);
+    ratio.mockRestore();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("PdfViewer zoom", () => {
   it("pill buttons zoom by the configured step about the viewport center", async () => {
     const w = await mountViewer();

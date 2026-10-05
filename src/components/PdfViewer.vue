@@ -42,7 +42,21 @@ const zoomStep = computed(() => ZOOM_STEPS[settings.image.zoomStep]);
 const container = ref<HTMLElement | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const viewport = ref({ w: 1, h: 1 });
-const dpr = window.devicePixelRatio || 1;
+const dpr = ref(window.devicePixelRatio || 1);
+// a resolution query matches only the current ratio, so it fires once when the
+// window moves to a display with other scaling and is re-armed for the next
+let dprQuery: MediaQueryList | null = null;
+function watchDpr() {
+  dprQuery?.removeEventListener("change", onDprChange);
+  dprQuery = null;
+  if (typeof matchMedia !== "function") return;
+  dprQuery = matchMedia(`(resolution: ${dpr.value}dppx)`);
+  dprQuery.addEventListener("change", onDprChange);
+}
+function onDprChange() {
+  dpr.value = window.devicePixelRatio || 1;
+  watchDpr();
+}
 
 // ---- document ----
 const handle = shallowRef<PdfHandle | null>(null);
@@ -317,6 +331,7 @@ onMounted(() => {
     ro = new ResizeObserver(measure);
     ro.observe(container.value);
   }
+  watchDpr();
   refocus();
 });
 onUnmounted(() => {
@@ -324,6 +339,7 @@ onUnmounted(() => {
   handle.value?.close();
   clearTimeout(settleTimer);
   ro?.disconnect();
+  dprQuery?.removeEventListener("change", onDprChange);
 });
 
 defineExpose({ handleAction });

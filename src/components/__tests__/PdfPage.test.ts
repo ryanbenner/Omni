@@ -204,4 +204,25 @@ describe("PdfPage", () => {
     expect(r.w / r.h).toBeCloseTo(1);
     expect(jobs[1].region).toEqual({ scale: 1, ...slice });
   });
+
+  it("re-renders both layers at a new device pixel ratio and hides the stale detail", async () => {
+    const { handle, jobs } = fakeHandle();
+    const slice = { x: 0, y: 0, w: 300, h: 400 };
+    const w = mount(PdfPage, {
+      props: { handle, page: 1, box: box(3), scale: 3, baseScale: 1, settled: { scale: 3, slice }, dpr: 1 },
+    });
+    await w.vm.$nextTick();
+    await settle(w, jobs, 0);
+    await settle(w, jobs, 1);
+    expect(w.findAll("canvas.detail").some((c) => visible(c.element))).toBe(true);
+    await w.setProps({ dpr: 2 });
+    expect(jobs).toHaveLength(4);
+    expect(jobs[2].dpr).toBe(2);
+    expect(jobs[2].region).toEqual({ scale: 1, x: 0, y: 0, w: 612, h: 792 });
+    expect(jobs[3].dpr).toBe(2);
+    expect(jobs[3].region).toEqual({ scale: 3, ...slice });
+    expect(w.findAll("canvas.detail").some((c) => visible(c.element))).toBe(false);
+    await settle(w, jobs, 3);
+    expect(w.findAll("canvas.detail").some((c) => visible(c.element))).toBe(true);
+  });
 });
