@@ -133,6 +133,7 @@ const boxStyle = computed(() => ({
 onBeforeUnmount(() => {
   base.clear();
   detail.clear();
+  props.handle.release(props.page);
 });
 </script>
 

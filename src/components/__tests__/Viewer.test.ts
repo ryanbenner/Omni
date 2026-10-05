@@ -16,6 +16,7 @@ vi.mock("../../composables/pdfDocument", () => ({
       pageCount: 1,
       pageSize: () => Promise.resolve({ w: 612, h: 792 }),
       render: () => ({ done: Promise.resolve(), cancel() {} }),
+      release() {},
       close: () => Promise.resolve(),
     }),
   ),

@@ -26,6 +26,7 @@ function fakeHandle(count = 3, sizes: { w: number; h: number }[] = []) {
       handle.renders.push({ n, scale: region.scale });
       return { done: Promise.resolve(), cancel: vi.fn() };
     }),
+    release: vi.fn(),
     close: vi.fn(() => Promise.resolve()),
   };
   return handle;

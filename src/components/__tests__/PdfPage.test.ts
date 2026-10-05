@@ -19,6 +19,7 @@ function fakeHandle() {
     pageCount: 1,
     pageSize: vi.fn(),
     close: vi.fn(),
+    release: vi.fn(),
     render: vi.fn((n: number, canvas: HTMLCanvasElement, region: RenderRegion, dpr: number) => {
       let resolve!: () => void;
       let reject!: (e: Error) => void;
@@ -170,6 +171,7 @@ describe("PdfPage", () => {
     expect(jobs[0].cancel).toHaveBeenCalled();
     expect(jobs[1].cancel).toHaveBeenCalled();
     for (const c of canvases) expect(c.width).toBe(0);
+    expect(handle.release).toHaveBeenCalledWith(1);
   });
 
   it("retries a region after its render rejected", async () => {

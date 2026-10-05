@@ -13,6 +13,7 @@ const { renderTask, page, doc, loading, getDocument, workerOptions, Cancelled } 
       ...o,
     })),
     render: vi.fn(() => renderTask),
+    cleanup: vi.fn(() => true),
   };
   const doc = { numPages: 3, getPage: vi.fn(() => Promise.resolve(page)) };
   const loading = { promise: Promise.resolve(doc), destroy: vi.fn(() => Promise.resolve()) };
@@ -99,6 +100,17 @@ describe("openPdf", () => {
     boom.catch(() => {});
     renderTask.promise = boom;
     await expect(h.render(1, canvas, { scale: 1, x: 0, y: 0, w: 10, h: 10 }, 1).done).rejects.toThrow("boom");
+  });
+
+  it("release cleans up a fetched page and a later use fetches it again", async () => {
+    const h = await openPdf(new Uint8Array());
+    h.release(2); // never fetched: nothing to do
+    expect(page.cleanup).not.toHaveBeenCalled();
+    await h.pageSize(2);
+    h.release(2);
+    expect(page.cleanup).toHaveBeenCalledTimes(1);
+    await h.pageSize(2);
+    expect(doc.getPage).toHaveBeenCalledTimes(2);
   });
 
   it("close destroys the loading task", async () => {

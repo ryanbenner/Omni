@@ -23,6 +23,8 @@ export interface PdfHandle {
   pageCount: number;
   pageSize(n: number): Promise<Size>;
   render(n: number, canvas: HTMLCanvasElement, region: RenderRegion, dpr: number): RenderJob;
+  // drops a page's operator list and decoded images; a later use fetches it again
+  release(n: number): void;
   close(): Promise<void>;
 }
 
@@ -40,11 +42,19 @@ export async function openPdf(data: Uint8Array): Promise<PdfHandle> {
   });
   const doc = await loading.promise;
   const pages = new Map<number, Promise<PDFPageProxy>>();
+  const loaded = new Map<number, PDFPageProxy>();
   function getPage(n: number): Promise<PDFPageProxy> {
     let p = pages.get(n);
     if (!p) {
-      p = doc.getPage(n);
-      pages.set(n, p);
+      const q = doc.getPage(n);
+      p = q;
+      pages.set(n, q);
+      q.then(
+        (page) => {
+          if (pages.get(n) === q) loaded.set(n, page);
+        },
+        () => {},
+      );
     }
     return p;
   }
@@ -81,6 +91,14 @@ export async function openPdf(data: Uint8Array): Promise<PdfHandle> {
           task?.cancel();
         },
       };
+    },
+    release(n) {
+      const page = loaded.get(n);
+      if (!page) return;
+      // pdf.js defers this until an in-flight (cancelled) render has wound down
+      page.cleanup();
+      loaded.delete(n);
+      pages.delete(n);
     },
     close: () => loading.destroy(),
   };
