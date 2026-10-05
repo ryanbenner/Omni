@@ -51,9 +51,13 @@ afterEach(() => {
   HTMLElement.prototype.getBoundingClientRect = originalRect;
 });
 
-async function mountViewer(handle = fakeHandle(), props: { hasPrev?: boolean; hasNext?: boolean } = {}) {
+async function mountViewer(
+  handle = fakeHandle(),
+  props: { hasPrev?: boolean; hasNext?: boolean } = {},
+  attach = false,
+) {
   openPdfMock.mockResolvedValue(handle);
-  const w = mount(PdfViewer, { props: { item: item(), ...props } });
+  const w = mount(PdfViewer, { props: { item: item(), ...props }, ...(attach ? { attachTo: document.body } : {}) });
   await flushPromises();
   await vi.advanceTimersByTimeAsync(200);
   await flushPromises();
@@ -126,6 +130,39 @@ describe("PdfViewer loading", () => {
     // the wide third page sets the column width
     expect(parseFloat(content.style.width)).toBeCloseTo(1224 * FIT + 2 * MARGIN);
     w.unmount();
+  });
+
+  it("stops measuring the old document after a file switch", async () => {
+    const slow = fakeHandle(40);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    (slow.pageSize as ReturnType<typeof vi.fn>).mockImplementation(async (n: number) => {
+      if (n > 1) await gate;
+      return letter;
+    });
+    const w = await mountViewer(slow);
+    openPdfMock.mockResolvedValueOnce(fakeHandle(2));
+    await w.setProps({ item: item("/p/next.pdf") });
+    await flushPromises();
+    release();
+    await flushPromises();
+    await flushPromises();
+    // page 1 at load, page 2 before the switch landed; nothing after
+    expect(slow.pageSize).toHaveBeenCalledTimes(2);
+    w.unmount();
+  });
+
+  it("shows no page count until the document has loaded", async () => {
+    let resolveOpen!: (h: PdfHandle) => void;
+    openPdfMock.mockImplementationOnce(() => new Promise<PdfHandle>((r) => (resolveOpen = r)));
+    const w = mount(PdfViewer, { props: { item: item() } });
+    await flushPromises();
+    expect(w.find(".pill").exists()).toBe(true);
+    expect(w.find(".pill-page").exists()).toBe(false);
+    resolveOpen(fakeHandle(4));
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(w.find(".pill-page").text()).toBe("1 / 4");
   });
 });
 
@@ -247,6 +284,24 @@ describe("PdfViewer navigation", () => {
     await vi.advanceTimersByTimeAsync(200);
     await flushPromises();
     expect(h.renders.some((r) => r.n === 6)).toBe(true);
+    w.unmount();
+  });
+
+  it("keeps keyboard focus on the scroller after an arrow click and after recovering from an error", async () => {
+    const w = await mountViewer(fakeHandle(), { hasNext: true }, true);
+    expect(document.activeElement).toBe(scroller(w));
+    await w.find(".nav-arrow.nav-next").trigger("click");
+    expect(document.activeElement).toBe(scroller(w));
+    openPdfMock.mockRejectedValueOnce(new Error("bad"));
+    await w.setProps({ item: item("/p/bad.pdf") });
+    await flushPromises();
+    expect(w.find(".pdf-error").exists()).toBe(true);
+    openPdfMock.mockResolvedValueOnce(fakeHandle());
+    await w.setProps({ item: item("/p/good.pdf") });
+    await flushPromises();
+    await flushPromises();
+    expect(w.find(".scroller").exists()).toBe(true);
+    expect(document.activeElement).toBe(scroller(w));
     w.unmount();
   });
 });

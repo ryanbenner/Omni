@@ -233,6 +233,9 @@ async function load() {
     gen.value = myGen;
     setScroll(0, 0);
     settle();
+    // the scroller recreates via v-if/v-else after an error, so focus needs a tick to land on it
+    await nextTick();
+    refocus();
     measureRest(h, myGen);
   } catch (e) {
     if (myGen !== generation) return;
@@ -252,13 +255,13 @@ async function measureRest(h: PdfHandle, myGen: number) {
     batch.length = 0;
   };
   for (let n = 2; n <= h.pageCount; n++) {
+    if (myGen !== generation) return;
     let size: Size;
     try {
       size = await h.pageSize(n);
     } catch {
       continue;
     }
-    if (myGen !== generation) return;
     batch.push({ i: n - 1, size });
     if (batch.length >= 16) flush();
   }
@@ -298,9 +301,9 @@ function handleAction(action: ViewerAction): boolean {
       return false;
   }
 }
-function navClick(dir: -1 | 1, e: MouseEvent) {
+function navClick(dir: -1 | 1) {
   emit("navigate", dir);
-  (e.currentTarget as HTMLElement).blur();
+  refocus();
 }
 // keyboard scrolling (up/down/space) goes to the focused scroller, so focus
 // returns to it after any pill press
@@ -363,7 +366,7 @@ defineExpose({ handleAction });
       :disabled="!hasPrev"
       title="Previous file"
       @pointerdown.stop
-      @click="navClick(-1, $event)"
+      @click="navClick(-1)"
     >
       <i class="ph ph-caret-left" />
     </button>
@@ -372,7 +375,7 @@ defineExpose({ handleAction });
       :disabled="!hasNext"
       title="Next file"
       @pointerdown.stop
-      @click="navClick(1, $event)"
+      @click="navClick(1)"
     >
       <i class="ph ph-caret-right" />
     </button>
@@ -414,7 +417,7 @@ defineExpose({ handleAction });
         <i class="ph ph-corners-out" />
       </button>
       <span class="pill-div" />
-      <span class="pill-page">{{ current + 1 }} / {{ sizes.length }}</span>
+      <span v-if="sizes.length" class="pill-page">{{ current + 1 }} / {{ sizes.length }}</span>
     </div>
   </div>
 </template>
