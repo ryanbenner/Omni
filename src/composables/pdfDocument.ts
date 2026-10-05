@@ -1,5 +1,5 @@
-import { getDocument, GlobalWorkerOptions, RenderingCancelledException } from "pdfjs-dist";
-import type { PDFDocumentLoadingTask, PDFPageProxy, RenderTask } from "pdfjs-dist";
+import { getDocument, GlobalWorkerOptions, RenderingCancelledException } from "pdfjs-dist/legacy/build/pdf.mjs";
+import type { PDFDocumentLoadingTask, PDFPageProxy, RenderTask } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "./pdfWorkerUrl";
 import type { Size } from "./pdfLayout";
 

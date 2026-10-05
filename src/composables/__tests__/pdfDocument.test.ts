@@ -22,7 +22,7 @@ const { renderTask, page, doc, loading, getDocument, workerOptions, Cancelled } 
   return { renderTask, page, doc, loading, getDocument, workerOptions, Cancelled };
 });
 
-vi.mock("pdfjs-dist", () => ({
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   getDocument: (src: unknown) => getDocument(src),
   GlobalWorkerOptions: workerOptions,
   RenderingCancelledException: Cancelled,
