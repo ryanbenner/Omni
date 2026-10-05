@@ -65,9 +65,8 @@ export function visibleRange(
   viewportH: number,
   margin = 0,
 ): { first: number; last: number } | null {
-  const scaledMargin = margin * viewportH / (viewportH + margin);
-  const lo = scrollTop - scaledMargin;
-  const hi = scrollTop + viewportH + scaledMargin;
+  const lo = scrollTop - margin;
+  const hi = scrollTop + viewportH + margin;
   let first = -1;
   let last = -1;
   for (let i = 0; i < boxes.length; i++) {

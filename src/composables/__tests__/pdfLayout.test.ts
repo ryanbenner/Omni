@@ -76,7 +76,8 @@ describe("visibleRange and currentPage", () => {
   });
 
   it("grows the window by the margin on both sides", () => {
-    expect(visibleRange(boxes, 900, 800, 800)).toEqual({ first: 0, last: 2 });
+    expect(visibleRange(boxes, 900, 800, 800)).toEqual({ first: 0, last: 3 });
+    expect(visibleRange(boxes, 900, 800, 0)).toEqual({ first: 1, last: 2 });
   });
 
   it("is null for an empty document or a viewport past the end", () => {
