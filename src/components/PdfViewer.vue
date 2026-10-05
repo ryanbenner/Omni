@@ -258,15 +258,28 @@ async function load() {
 }
 
 // sizes after page 1 arrive in the background in batches, so a long document
-// relayouts a few times instead of once per page; a bad page keeps page 1's size
+// relayouts a few times instead of once per page; a bad page keeps page 1's size.
+// each relayout keeps the page at the viewport top, and the same share of it,
+// where it was, so a reader who already scrolled down does not drift
 async function measureRest(h: PdfHandle, myGen: number) {
   const batch: { i: number; size: Size }[] = [];
-  const flush = () => {
+  const flush = async () => {
     if (!batch.length) return;
+    const boxes = lay.value.boxes;
+    let i = 0;
+    while (i + 1 < boxes.length && boxes[i + 1].top <= scrollTop.value) i++;
+    const into = scrollTop.value - boxes[i].top;
+    const frac = Math.min(1, Math.max(0, into / boxes[i].h));
+    // px above the page (the top margin) or below it (the gap), which do not scale
+    const rest = into - frac * boxes[i].h;
     const next = sizes.value.slice();
     for (const b of batch) next[b.i] = b.size;
     sizes.value = next;
     batch.length = 0;
+    await nextTick();
+    if (myGen !== generation) return;
+    const nb = lay.value.boxes[i];
+    setScroll(scrollLeft.value, nb.top + frac * nb.h + rest);
   };
   for (let n = 2; n <= h.pageCount; n++) {
     if (myGen !== generation) return;
@@ -276,10 +289,11 @@ async function measureRest(h: PdfHandle, myGen: number) {
     } catch {
       continue;
     }
+    if (myGen !== generation) return;
     batch.push({ i: n - 1, size });
-    if (batch.length >= 16) flush();
+    if (batch.length >= 16) await flush();
   }
-  flush();
+  await flush();
 }
 
 watch(() => props.item.path, load, { immediate: true });

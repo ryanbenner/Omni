@@ -155,6 +155,37 @@ describe("PdfViewer loading", () => {
     w.unmount();
   });
 
+  it("keeps the page in view when background sizes land", async () => {
+    const h = fakeHandle(5);
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    // page 1 is measured at load; page 2 turns out three times as tall
+    (h.pageSize as ReturnType<typeof vi.fn>).mockImplementation(async (n: number) => {
+      if (n === 1) return letter;
+      await gate;
+      return n === 2 ? { w: letter.w, h: letter.h * 3 } : letter;
+    });
+    const w = await mountViewer(h);
+    const el = scroller(w);
+    exposed(w).handleAction({ type: "pageStep", pages: 1 });
+    await w.vm.$nextTick();
+    exposed(w).handleAction({ type: "pageStep", pages: 1 });
+    await w.vm.$nextTick();
+    expect(w.find(".pill-page").text()).toBe("3 / 5");
+    const before = el.scrollTop;
+    const pageH = letter.h * FIT;
+    expect(before).toBeCloseTo(MARGIN + 2 * (pageH + GAP) - GAP);
+    open();
+    await flushPromises();
+    await w.vm.$nextTick();
+    // page 3 now starts two page heights lower; the view moves with it and
+    // keeps the same sliver of gap above it that the page step left
+    const page3Top = MARGIN + pageH + GAP + 3 * pageH + GAP;
+    expect(Math.abs(el.scrollTop - (page3Top - GAP))).toBeLessThan(1);
+    expect(w.find(".pill-page").text()).toBe("3 / 5");
+    w.unmount();
+  });
+
   it("shows no page count until the document has loaded", async () => {
     let resolveOpen!: (h: PdfHandle) => void;
     openPdfMock.mockImplementationOnce(() => new Promise<PdfHandle>((r) => (resolveOpen = r)));
