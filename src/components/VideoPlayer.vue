@@ -230,7 +230,12 @@ const topGap = computed(() => {
   return (h - rendered) / 2;
 });
 const showName = computed(() => props.showName === true && topGap.value >= NAME_BAND_MIN);
-const src = computed(() => convertFileSrc(props.item.path));
+// a replace rewrites the file at the same path; the version query makes it a
+// new url so the element and webview's media cache drop the old bytes. the
+// asset protocol only reads the path, so the query never reaches the disk
+const src = computed(
+  () => `${convertFileSrc(props.item.path)}?v=${props.item.mtime}-${props.item.size}`,
+);
 
 const playing = ref(false);
 const currentTime = ref(0);

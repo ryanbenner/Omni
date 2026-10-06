@@ -316,3 +316,18 @@ describe("VideoPlayer delete confirmation", () => {
     expect(w.emitted("deleteFile")).toHaveLength(1);
   });
 });
+
+describe("VideoPlayer after a replace", () => {
+  it("reloads a file rewritten at the same path", async () => {
+    const w = mount(VideoPlayer, { props: { item } });
+    mounted.push(w);
+    const before = w.find("video").attributes("src");
+    // the stale stream errors out against the rewritten bytes
+    w.find("video").element.dispatchEvent(new Event("error"));
+    await w.vm.$nextTick();
+    expect(w.find(".video-error").exists()).toBe(true);
+    await w.setProps({ item: { ...item, mtime: 2, size: 10 } });
+    expect(w.find(".video-error").exists()).toBe(false);
+    expect(w.find("video").attributes("src")).not.toBe(before);
+  });
+});
