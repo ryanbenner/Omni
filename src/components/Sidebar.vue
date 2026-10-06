@@ -247,10 +247,18 @@ interface FileRow {
   path: string;
   name: string;
   mediaKind?: MediaKind;
+  mtime?: number;
+  size?: number;
 }
 let fileDragged = false;
 const thumbCache = new Map<string, string>();
 const thumbInFlight = new Set<string>();
+
+// a replace rewrites the file at the same path, so the frame is cached per
+// version and the url carries it too, keeping webview's media cache out of it
+function thumbUrl(row: FileRow) {
+  return `${convertFileSrc(row.path)}?v=${row.mtime}-${row.size}`;
+}
 
 // video rows drag with a frame thumbnail, decoded ahead of time on hover or
 // press. dragstart must not wait for it: the os drag has to begin while the
@@ -258,14 +266,15 @@ const thumbInFlight = new Set<string>();
 // once the mouse moves again
 function warmThumbnail(row: FileRow) {
   if (row.mediaKind !== "video") return;
-  if (thumbCache.has(row.path) || thumbInFlight.has(row.path)) return;
-  thumbInFlight.add(row.path);
-  videoThumbnail(convertFileSrc(row.path))
-    .then((t) => thumbCache.set(row.path, t))
+  const url = thumbUrl(row);
+  if (thumbCache.has(url) || thumbInFlight.has(url)) return;
+  thumbInFlight.add(url);
+  videoThumbnail(url)
+    .then((t) => thumbCache.set(url, t))
     .catch(() => {
       // unreadable now: the pill is used and a later hover tries again
     })
-    .finally(() => thumbInFlight.delete(row.path));
+    .finally(() => thumbInFlight.delete(url));
 }
 
 function onFileDown(e: PointerEvent, row: FileRow) {
@@ -278,7 +287,7 @@ async function onFileDragStart(e: Event, row: FileRow) {
   // must come first: with the browser drag cancelled the pointer is free for
   // the os drag session
   e.preventDefault();
-  const icon = thumbCache.get(row.path) ?? filePreview(row.name);
+  const icon = thumbCache.get(thumbUrl(row)) ?? filePreview(row.name);
   fileDragged = true;
   try {
     // copy: the destination gets a copy and the source file stays put

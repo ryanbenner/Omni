@@ -27,15 +27,18 @@ import Sidebar from "../Sidebar.vue";
 
 const VIDEO = "C:\\clips\\a_clip.mp4";
 const IMAGE = "C:\\clips\\shot.png";
+let videoVersion = { mtime: 0, size: 1 };
 
 function wire() {
-  invokeMock.mockImplementation((cmd: string) => {
+  invokeMock.mockImplementation((cmd: string, args?: { path: string }) => {
     if (cmd === "list_drives") return Promise.resolve([{ path: "C:\\", name: "C:" }]);
+    if (cmd === "read_dir_entries" && args?.path === "C:\\")
+      return Promise.resolve({ folders: [{ path: "C:\\clips", name: "clips" }], files: [] });
     if (cmd === "read_dir_entries")
       return Promise.resolve({
         folders: [],
         files: [
-          { path: VIDEO, name: "a_clip.mp4", kind: "video", mtime: 0, size: 1 },
+          { path: VIDEO, name: "a_clip.mp4", kind: "video", ...videoVersion },
           { path: IMAGE, name: "shot.png", kind: "image", mtime: 0, size: 1 },
         ],
       });
@@ -89,6 +92,7 @@ describe("Sidebar file drag out", () => {
     document.body.innerHTML = "";
     // jsdom has no scrollIntoView; the sidebar calls it after revealing the open file
     Element.prototype.scrollIntoView = vi.fn();
+    videoVersion = { mtime: 0, size: 1 };
     wire();
   });
 
@@ -123,7 +127,7 @@ describe("Sidebar file drag out", () => {
     const el = row(w, "a_clip.mp4");
     await fire(w, el, "pointerenter", {});
     await flushPromises();
-    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
+    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}?v=0-1`);
     await holdAndDrag(w, el);
     expect(startDragMock.mock.calls[0][0]).toEqual({ item: [VIDEO], icon: "thumb", mode: "copy" });
     // cached: a second hover or drag does not decode the video again
@@ -131,6 +135,23 @@ describe("Sidebar file drag out", () => {
     await holdAndDrag(w, el);
     expect(thumbMock).toHaveBeenCalledTimes(1);
     expect(startDragMock.mock.calls[1][0].icon).toBe("thumb");
+  });
+
+  it("a video replaced at the same path gets a fresh thumbnail", async () => {
+    const w = await mountOpen();
+    await fire(w, row(w, "a_clip.mp4"), "pointerenter", {});
+    await flushPromises();
+    thumbMock.mockResolvedValue("new thumb");
+    videoVersion = { mtime: 5, size: 2 };
+    (w.vm as unknown as { refreshDir: (d: string) => void }).refreshDir("C:\\clips");
+    await flushPromises();
+    const el = row(w, "a_clip.mp4");
+    await fire(w, el, "pointerenter", {});
+    await flushPromises();
+    expect(thumbMock).toHaveBeenCalledTimes(2);
+    expect(thumbMock.mock.calls[1][0]).not.toBe(thumbMock.mock.calls[0][0]);
+    await holdAndDrag(w, el);
+    expect(startDragMock.mock.calls[0][0].icon).toBe("new thumb");
   });
 
   it("starts the drag immediately with the pill when the thumbnail is not ready yet", async () => {
@@ -153,7 +174,7 @@ describe("Sidebar file drag out", () => {
   it("pressing on a video row also warms the thumbnail", async () => {
     const w = await mountOpen();
     await fire(w, row(w, "a_clip.mp4"), "pointerdown", { button: 0, clientX: 10, clientY: 10 });
-    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}`);
+    expect(thumbMock).toHaveBeenCalledWith(`asset://${VIDEO}?v=0-1`);
   });
 
   it("a thumbnail that cannot be read is retried later and the pill is used meanwhile", async () => {

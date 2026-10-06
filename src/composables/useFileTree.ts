@@ -11,6 +11,8 @@ export interface TreeRow {
   label: string;
   kind: "drive" | "folder" | "file";
   mediaKind?: MediaKind;
+  mtime?: number;
+  size?: number;
   depth: number;
   guides: number;
   open: boolean;
@@ -255,6 +257,8 @@ export function useFileTree(openFile: (path: string) => void) {
         label: displayLabel(file.name, true),
         kind: "file",
         mediaKind: file.kind,
+        mtime: file.mtime,
+        size: file.size,
         depth: depth + 1,
         guides: depth,
         open: false,
