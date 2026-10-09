@@ -73,7 +73,6 @@ const menu = ref<{
   path: string;
   name: string;
   kind: string;
-  row?: DOMRect;
 } | null>(null);
 
 function closeMenu() {
@@ -214,8 +213,7 @@ async function rowClick(row: TreeRow) {
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
   if (row.kind === "drive") return;
   e.preventDefault();
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind, row: rect };
+  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind };
 }
 
 function onPinContext(e: MouseEvent, pin: Pin) {
@@ -484,9 +482,9 @@ async function copyToClipboard() {
   }
 }
 
-// delete asks in a pill just above the row; a press anywhere else or escape
+// delete asks in a pill where the menu was; a press anywhere else or escape
 // closes it with nothing done
-const confirm = ref<{ path: string; left: number; bottom: number } | null>(null);
+const confirm = ref<{ path: string; left: number; top: number } | null>(null);
 let offConfirmEscape: (() => void) | null = null;
 function closeConfirm() {
   confirm.value = null;
@@ -499,11 +497,11 @@ function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
   if (!m) return;
-  if (!settings.general.confirmDelete || !m.row) {
+  if (!settings.general.confirmDelete) {
     deleteFile(m.path);
     return;
   }
-  confirm.value = { path: m.path, left: m.row.left + 8, bottom: window.innerHeight - m.row.top + 4 };
+  confirm.value = { path: m.path, left: m.x, top: m.y };
   window.addEventListener("pointerdown", closeConfirm);
   offConfirmEscape = onEscape(closeConfirm);
 }
@@ -680,7 +678,7 @@ async function deleteFile(path: string) {
     <div
       v-if="confirm"
       class="confirm-pop tree-confirm"
-      :style="{ left: confirm.left + 'px', bottom: confirm.bottom + 'px' }"
+      :style="{ left: confirm.left + 'px', top: confirm.top + 'px' }"
       @pointerdown.stop
     >
       <span class="confirm-text">Are you sure?</span>

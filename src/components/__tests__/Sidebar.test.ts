@@ -261,17 +261,17 @@ describe("Sidebar delete", () => {
     w.unmount();
   });
 
-  it("asks in a pill above the row when confirmation is on and deletes only on Yes", async () => {
+  it("asks in a pill where the menu was when confirmation is on and deletes only on Yes", async () => {
     const w = await openMenuOnA();
-    const row = w.findAll(".tree-row")[1].element as HTMLElement;
-    row.getBoundingClientRect = () => ({ left: 12, top: 100 }) as DOMRect;
-    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 140, clientY: 110 });
+    const menu = w.find(".context-menu").element as HTMLElement;
+    expect([menu.style.left, menu.style.top]).toEqual(["140px", "110px"]);
     await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
     expect(w.find(".context-menu").exists()).toBe(false);
     const pop = w.find(".confirm-pop");
     expect(pop.text()).toContain("Are you sure?");
-    expect((pop.element as HTMLElement).style.left).toBe("20px");
-    expect((pop.element as HTMLElement).style.bottom).toBe(`${window.innerHeight - 100 + 4}px`);
+    const style = (pop.element as HTMLElement).style;
+    expect([style.left, style.top, style.bottom]).toEqual(["140px", "110px", ""]);
     expect(ask).not.toHaveBeenCalled();
     expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
     await pop.find(".btn-no").trigger("click");
