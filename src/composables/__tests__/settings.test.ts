@@ -92,7 +92,7 @@ describe("settings store", () => {
     });
     expect(() => loadSettings()).not.toThrow();
     expect(settings).toEqual(DEFAULTS);
-    settings.general.offerResume = false;
+    settings.general.offerResume = true;
     await nextTick();
     expect(set).toHaveBeenCalled();
     get.mockRestore();
@@ -103,7 +103,7 @@ describe("settings store", () => {
     loadSettings();
     expect(settings.general).toEqual({
       sidebarAtLaunch: true,
-      offerResume: true,
+      offerResume: false,
       wrapAround: false,
       showHidden: false,
       reopen: "off",
