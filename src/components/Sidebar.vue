@@ -986,6 +986,8 @@ async function deleteFile(path: string) {
 }
 .tree-confirm {
   position: fixed;
+  /* the shared pill sits above its trash button by bottom; this one is placed by top */
+  bottom: auto;
   z-index: 20;
 }
 .context-menu {
