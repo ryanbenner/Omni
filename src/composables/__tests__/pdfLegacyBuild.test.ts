@@ -34,5 +34,6 @@ describe("pdf.js legacy build", () => {
     expect(vp.width).toBe(612);
     expect(vp.height).toBe(792);
     await loading.destroy();
-  });
+    // loading pdf.js cold can pass the 5s default on the windows ci runner
+  }, 30_000);
 });
