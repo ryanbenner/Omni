@@ -194,6 +194,7 @@ describe("App collage routing", () => {
 
   it("offers to resume the last collage on the empty screen", async () => {
     localStorage.setItem("mv-last-collage", "/p/weekend.collage");
+    settings.general.offerResume = true;
     const w = await mountApp();
     const btn = w.find(".resume-btn");
     expect(btn.text()).toBe("Resume weekend.collage");
@@ -449,6 +450,7 @@ describe("App settings", () => {
 
   it("hides the resume offer live when the setting is off", async () => {
     localStorage.setItem("mv-last-collage", "/p/weekend.collage");
+    settings.general.offerResume = true;
     const w = await mountApp();
     expect(w.find(".resume-btn").exists()).toBe(true);
     settings.general.offerResume = false;
@@ -518,6 +520,7 @@ describe("App settings", () => {
 
   it("hides the resume offer live when the setting is off", async () => {
     localStorage.setItem("mv-last-collage", "/p/weekend.collage");
+    settings.general.offerResume = true;
     const w = await mountApp();
     expect(w.find(".resume-btn").exists()).toBe(true);
     settings.general.offerResume = false;

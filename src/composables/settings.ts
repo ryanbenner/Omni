@@ -28,11 +28,12 @@ export interface Settings {
   collage: { memoryCapGb: number; jpgQuality: number };
 }
 
-// every default is the value the code hardcoded before settings existed
+// every default is the value the code hardcoded before settings existed,
+// except offerResume, which starts off
 export const DEFAULTS: Settings = {
   general: {
     sidebarAtLaunch: true,
-    offerResume: true,
+    offerResume: false,
     wrapAround: false,
     showHidden: false,
     reopen: "off",
