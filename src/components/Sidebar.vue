@@ -178,6 +178,36 @@ function updateStack() {
 }
 watch(tree.rows, () => nextTick(updateStack));
 
+// a notch that would carry an open folder's first row past the top edge stops
+// with that row flush under the stack; the notch after a catch always runs free
+let caught = false;
+function onTreeWheel(e: WheelEvent) {
+  const el = scroller();
+  const first = el?.querySelector<HTMLElement>(".tree-row");
+  if (!el || !first || !e.deltaY || e.ctrlKey) return;
+  if (caught) {
+    caught = false;
+    return;
+  }
+  const from = el.scrollTop;
+  const to = from + e.deltaY;
+  const base = first.getBoundingClientRect().top - el.getBoundingClientRect().top + from;
+  const rows = tree.rows.value;
+  // scroll offsets that put each open folder's first row at the edge, top down
+  const catches = rows.flatMap((r, i) =>
+    r.kind !== "file" && rows[i + 1]?.depth > r.depth ? [base + (i + 1) * ROW_H] : [],
+  );
+  // the 1 px slack keeps a fractional scrollTop from catching on the row it sits on
+  const at =
+    e.deltaY > 0
+      ? catches.find((c) => c > from + 1 && c < to)
+      : catches.reverse().find((c) => c < from - 1 && c > to);
+  if (at === undefined) return;
+  e.preventDefault();
+  el.scrollTop = at;
+  caught = true;
+}
+
 // puts a row's top edge `y` px below the top of the tree
 function scrollRowTo(path: string, y: number) {
   const i = tree.rows.value.findIndex((r) => r.path === path);
@@ -568,7 +598,7 @@ async function deleteFile(path: string) {
         </button>
       </template>
     </div>
-    <div class="scroll" @scroll.passive="updateStack">
+    <div class="scroll" @scroll.passive="updateStack" @wheel="onTreeWheel">
       <div class="section-label">THIS PC</div>
       <div
         v-for="row in tree.rows.value"
