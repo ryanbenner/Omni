@@ -1,6 +1,7 @@
 mod scan;
 mod browse;
 mod export;
+mod probe;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -34,7 +35,8 @@ pub fn run() {
             browse::rename_file,
             browse::copy_file_to_clipboard,
             export::export_clip,
-            export::cancel_export
+            export::cancel_export,
+            probe::probe_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
