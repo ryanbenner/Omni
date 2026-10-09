@@ -319,6 +319,8 @@ describe("VideoPlayer delete confirmation", () => {
 
 describe("VideoPlayer after a replace", () => {
   it("reloads a file rewritten at the same path", async () => {
+    // the error asks ffmpeg what went wrong
+    vi.mocked(invoke).mockResolvedValue({ kind: "damaged" });
     const w = mount(VideoPlayer, { props: { item } });
     mounted.push(w);
     const before = w.find("video").attributes("src");
