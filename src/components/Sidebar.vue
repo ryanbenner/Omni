@@ -73,7 +73,6 @@ const menu = ref<{
   path: string;
   name: string;
   kind: string;
-  row?: DOMRect;
 } | null>(null);
 
 function closeMenu() {
@@ -179,6 +178,36 @@ function updateStack() {
 }
 watch(tree.rows, () => nextTick(updateStack));
 
+// a notch that would carry an open folder's first row past the top edge stops
+// with that row flush under the stack; the notch after a catch always runs free
+let caught = false;
+function onTreeWheel(e: WheelEvent) {
+  const el = scroller();
+  const first = el?.querySelector<HTMLElement>(".tree-row");
+  if (!el || !first || !e.deltaY || e.ctrlKey) return;
+  if (caught) {
+    caught = false;
+    return;
+  }
+  const from = el.scrollTop;
+  const to = from + e.deltaY;
+  const base = first.getBoundingClientRect().top - el.getBoundingClientRect().top + from;
+  const rows = tree.rows.value;
+  // scroll offsets that put each open folder's first row at the edge, top down
+  const catches = rows.flatMap((r, i) =>
+    r.kind !== "file" && rows[i + 1]?.depth > r.depth ? [base + (i + 1) * ROW_H] : [],
+  );
+  // the 1 px slack keeps a fractional scrollTop from catching on the row it sits on
+  const at =
+    e.deltaY > 0
+      ? catches.find((c) => c > from + 1 && c < to)
+      : catches.reverse().find((c) => c < from - 1 && c > to);
+  if (at === undefined) return;
+  e.preventDefault();
+  el.scrollTop = at;
+  caught = true;
+}
+
 // puts a row's top edge `y` px below the top of the tree
 function scrollRowTo(path: string, y: number) {
   const i = tree.rows.value.findIndex((r) => r.path === path);
@@ -214,8 +243,7 @@ async function rowClick(row: TreeRow) {
 function onRowContext(e: MouseEvent, row: { kind: string; path: string; name: string }) {
   if (row.kind === "drive") return;
   e.preventDefault();
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind, row: rect };
+  menu.value = { x: e.clientX, y: e.clientY, path: row.path, name: row.name, kind: row.kind };
 }
 
 function onPinContext(e: MouseEvent, pin: Pin) {
@@ -484,9 +512,9 @@ async function copyToClipboard() {
   }
 }
 
-// delete asks in a pill just above the row; a press anywhere else or escape
+// delete asks in a pill where the menu was; a press anywhere else or escape
 // closes it with nothing done
-const confirm = ref<{ path: string; left: number; bottom: number } | null>(null);
+const confirm = ref<{ path: string; left: number; top: number } | null>(null);
 let offConfirmEscape: (() => void) | null = null;
 function closeConfirm() {
   confirm.value = null;
@@ -499,11 +527,11 @@ function deleteFromMenu() {
   const m = menu.value;
   menu.value = null;
   if (!m) return;
-  if (!settings.general.confirmDelete || !m.row) {
+  if (!settings.general.confirmDelete) {
     deleteFile(m.path);
     return;
   }
-  confirm.value = { path: m.path, left: m.row.left + 8, bottom: window.innerHeight - m.row.top + 4 };
+  confirm.value = { path: m.path, left: m.x, top: m.y };
   window.addEventListener("pointerdown", closeConfirm);
   offConfirmEscape = onEscape(closeConfirm);
 }
@@ -570,7 +598,7 @@ async function deleteFile(path: string) {
         </button>
       </template>
     </div>
-    <div class="scroll" @scroll.passive="updateStack">
+    <div class="scroll" @scroll.passive="updateStack" @wheel="onTreeWheel">
       <div class="section-label">THIS PC</div>
       <div
         v-for="row in tree.rows.value"
@@ -680,7 +708,7 @@ async function deleteFile(path: string) {
     <div
       v-if="confirm"
       class="confirm-pop tree-confirm"
-      :style="{ left: confirm.left + 'px', bottom: confirm.bottom + 'px' }"
+      :style="{ left: confirm.left + 'px', top: confirm.top + 'px' }"
       @pointerdown.stop
     >
       <span class="confirm-text">Are you sure?</span>

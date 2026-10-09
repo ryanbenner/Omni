@@ -261,17 +261,17 @@ describe("Sidebar delete", () => {
     w.unmount();
   });
 
-  it("asks in a pill above the row when confirmation is on and deletes only on Yes", async () => {
+  it("asks in a pill where the menu was when confirmation is on and deletes only on Yes", async () => {
     const w = await openMenuOnA();
-    const row = w.findAll(".tree-row")[1].element as HTMLElement;
-    row.getBoundingClientRect = () => ({ left: 12, top: 100 }) as DOMRect;
-    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".tree-row")[1].trigger("contextmenu", { clientX: 140, clientY: 110 });
+    const menu = w.find(".context-menu").element as HTMLElement;
+    expect([menu.style.left, menu.style.top]).toEqual(["140px", "110px"]);
     await w.findAll(".menu-item").find((m) => m.text().startsWith("Delete"))!.trigger("click");
     expect(w.find(".context-menu").exists()).toBe(false);
     const pop = w.find(".confirm-pop");
     expect(pop.text()).toContain("Are you sure?");
-    expect((pop.element as HTMLElement).style.left).toBe("20px");
-    expect((pop.element as HTMLElement).style.bottom).toBe(`${window.innerHeight - 100 + 4}px`);
+    const style = (pop.element as HTMLElement).style;
+    expect([style.left, style.top, style.bottom]).toEqual(["140px", "110px", ""]);
     expect(ask).not.toHaveBeenCalled();
     expect(invokeMock).not.toHaveBeenCalledWith("delete_file", expect.anything());
     await pop.find(".btn-no").trigger("click");
@@ -539,6 +539,67 @@ describe("Sidebar reveal folder", () => {
     expect(stackNames(w)).toEqual(["C:", "Sub"]);
     expect(w.find(".crumb-more").text()).toBe("…");
     expect(w.findAll(".crumb-sep")).toHaveLength(2);
+    w.unmount();
+  });
+
+  // a live scroll box: the first row sits 30 px into the content, below the heading
+  function scrollable(w: ReturnType<typeof mount>, top: number) {
+    const el = w.find(".scroll").element as HTMLElement;
+    let pos = top;
+    Object.defineProperty(el, "scrollTop", { get: () => pos, set: (v) => (pos = v), configurable: true });
+    el.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+    (w.find(".tree-row").element as HTMLElement).getBoundingClientRect = () => ({ top: 30 - pos }) as DOMRect;
+    return el;
+  }
+  function notch(el: HTMLElement, deltaY: number) {
+    const e = new WheelEvent("wheel", { deltaY, cancelable: true, bubbles: true });
+    el.dispatchEvent(e);
+    return e.defaultPrevented;
+  }
+
+  it("a notch that would carry a folder's first row past the edge stops it flush under the stack", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    // C:, Pics and Sub are open: their first rows reach the edge at 56, 82 and 108
+    const el = scrollable(w, 0);
+    expect(notch(el, 100)).toBe(true);
+    expect(el.scrollTop).toBe(56);
+    w.unmount();
+  });
+
+  it("the notch after a catch scrolls freely, and the one after that can catch again", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const el = scrollable(w, 0);
+    notch(el, 100);
+    // 82 is in reach, but this notch is the release
+    expect(notch(el, 100)).toBe(false);
+    expect(el.scrollTop).toBe(56);
+    // the browser carried it on to 156; heading back up, the nearest catch is 108
+    el.scrollTop = 156;
+    expect(notch(el, -100)).toBe(true);
+    expect(el.scrollTop).toBe(108);
+    w.unmount();
+  });
+
+  it("a notch that crosses no folder's first row scrolls as usual", async () => {
+    const w = mount(Sidebar, {
+      props: { currentPath: "C:\\Pics\\Sub\\x.jpg", currentFolder: "C:\\Pics\\Sub" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const el = scrollable(w, 0);
+    expect(notch(el, 20)).toBe(false);
+    // sitting on a catch already: leaving it is never caught by it
+    el.scrollTop = 56;
+    expect(notch(el, -20)).toBe(false);
+    expect(el.scrollTop).toBe(56);
     w.unmount();
   });
 

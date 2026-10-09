@@ -251,6 +251,8 @@ watch([volume, muted], ([v, m]) => {
   el.muted = m;
 });
 const failed = ref(false);
+// why it failed, from ffmpeg's read of the file; empty until that answers
+const failureHint = ref("");
 const speed = ref(settings.video.defaultSpeed);
 
 const FRAME = 1 / 60;
@@ -471,6 +473,7 @@ onUnmounted(() => {
 watch(src, () => {
   // new file: reset transient state, keep volume and mute
   failed.value = false;
+  failureHint.value = "";
   currentTime.value = 0;
   duration.value = 0;
   speed.value = settings.video.defaultSpeed;
@@ -503,8 +506,34 @@ function onTimeUpdate() {
   }
 }
 
-function onError() {
+type PlayFailure =
+  | { kind: "unreadable" | "mkv" | "hevc" | "damaged" }
+  | { kind: "unsupported"; codec: string };
+
+function hintFor(f: PlayFailure): string {
+  switch (f.kind) {
+    case "damaged":
+      return "This clip didn't save correctly. Its video data is damaged, so other players will likely fail on it too.";
+    case "hevc":
+      return 'This video is HEVC/H.265 (common for ShadowPlay HDR or high-quality captures). Install the free "HEVC Video Extensions" from the Microsoft Store, then reopen the file.';
+    case "mkv":
+      return ".mkv files can't play in this viewer yet.";
+    case "unsupported":
+      return `This video is ${f.codec}, which this viewer can't play.`;
+    case "unreadable":
+      return "Omni couldn't read the file. It may have been moved, renamed, or locked by another program.";
+  }
+}
+
+async function onError() {
   failed.value = true;
+  const from = src.value;
+  const hint = await invoke<PlayFailure>("probe_video", { path: props.item.path }).then(
+    hintFor,
+    () => "Windows couldn't decode this video.",
+  );
+  // another file may have opened while ffmpeg ran
+  if (src.value === from && failed.value) failureHint.value = hint;
 }
 
 function togglePlay() {
@@ -630,13 +659,7 @@ const progress = computed(() =>
   >
     <div v-if="failed" class="video-error">
       <p>Couldn't play {{ item.name }}.</p>
-      <p class="hint">
-        Windows couldn't decode this video. Note: an .mp4 file can still
-        contain HEVC/H.265 video (common for ShadowPlay HDR or high-quality
-        captures) — install the free "HEVC Video Extensions" from the
-        Microsoft Store, then reopen the file. .mkv files also can't play in
-        this viewer yet.
-      </p>
+      <p v-if="failureHint" class="hint">{{ failureHint }}</p>
     </div>
     <div v-else ref="wrap" class="video-wrap">
       <div v-if="showName" class="file-name">{{ item.name }}</div>

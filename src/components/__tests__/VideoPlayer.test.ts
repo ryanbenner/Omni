@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -329,5 +329,59 @@ describe("VideoPlayer after a replace", () => {
     await w.setProps({ item: { ...item, mtime: 2, size: 10 } });
     expect(w.find(".video-error").exists()).toBe(false);
     expect(w.find("video").attributes("src")).not.toBe(before);
+  });
+});
+
+describe("VideoPlayer error screen", () => {
+  afterEach(() => vi.mocked(invoke).mockReset());
+
+  async function failWith(probe: () => Promise<unknown>) {
+    vi.mocked(invoke).mockImplementation((cmd) =>
+      cmd === "probe_video" ? probe() : Promise.resolve(),
+    );
+    const w = mount(VideoPlayer, { props: { item } });
+    mounted.push(w);
+    w.find("video").element.dispatchEvent(new Event("error"));
+    await flushPromises();
+    return w;
+  }
+
+  it.each([
+    [{ kind: "damaged" }, "didn't save correctly"],
+    [{ kind: "hevc" }, "HEVC Video Extensions"],
+    [{ kind: "mkv" }, ".mkv files can't play"],
+    [{ kind: "unsupported", codec: "mpeg4" }, "mpeg4"],
+    [{ kind: "unreadable" }, "moved, renamed"],
+  ])("explains a %o failure", async (failure, expected) => {
+    const w = await failWith(() => Promise.resolve(failure));
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("probe_video", { path: "/f/a.mp4" });
+    expect(w.find(".video-error .hint").text()).toContain(expected);
+  });
+
+  it("only blames hevc when the file is hevc", async () => {
+    const w = await failWith(() => Promise.resolve({ kind: "damaged" }));
+    expect(w.find(".video-error").text()).not.toContain("HEVC");
+  });
+
+  it("falls back to a plain message when the probe fails", async () => {
+    const w = await failWith(() => Promise.reject("no ffmpeg"));
+    const hint = w.find(".video-error .hint").text();
+    expect(hint).toContain("couldn't decode");
+    expect(hint).not.toContain("HEVC");
+  });
+
+  it("ignores a probe that answers after the file changed", async () => {
+    let answerFirst!: (v: unknown) => void;
+    const probes = [
+      new Promise((r) => (answerFirst = r)),
+      new Promise(() => {}),
+    ];
+    const w = await failWith(() => probes.shift()!);
+    await w.setProps({ item: { ...item, path: "/f/b.mp4", name: "b.mp4" } });
+    w.find("video").element.dispatchEvent(new Event("error"));
+    await flushPromises();
+    answerFirst({ kind: "hevc" });
+    await flushPromises();
+    expect(w.find(".video-error").text()).not.toContain("HEVC");
   });
 });
