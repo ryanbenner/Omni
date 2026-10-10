@@ -94,10 +94,10 @@ const sizeLabel = computed(() => {
   if (est <= 0) return "";
   const cap = clipCapBytes();
   if (capped.value && est > cap) {
-    return `~${formatMB(cap)} (capped from ≈${formatMB(est)})`;
+    return `~${formatMB(cap)} (capped from ${formatMB(est)})`;
   }
-  if (capped.value) return `≈${formatMB(est)} · under the cap`;
-  return `≈${formatMB(est)}`;
+  if (capped.value) return `${formatMB(est)} · under the cap`;
+  return `${formatMB(est)}`;
 });
 
 function flash(msg: string) {
