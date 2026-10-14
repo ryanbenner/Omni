@@ -152,6 +152,117 @@ describe("VideoPlayer settings", () => {
   });
 });
 
+describe("VideoPlayer video settings", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    loadSettings();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function seekable(el: HTMLVideoElement) {
+    Object.defineProperty(el, "duration", { value: 100, configurable: true });
+    Object.defineProperty(el, "currentTime", { value: 50, writable: true, configurable: true });
+  }
+
+  it("the skip buttons show and jump by the skip step", async () => {
+    settings.video.skipStep = 15;
+    const { w, el } = mountPlayer(true);
+    seekable(el);
+    const fwd = w.find("button[title='Forward 15 seconds']");
+    expect(fwd.find(".skip-num").text()).toBe("15");
+    await fwd.trigger("click");
+    expect(el.currentTime).toBe(65);
+    await w.find("button[title='Back 15 seconds']").trigger("click");
+    expect(el.currentTime).toBe(50);
+  });
+
+  it("autoplays on load unless start paused is on", () => {
+    const a = mountPlayer(true);
+    a.el.dispatchEvent(new Event("loadedmetadata"));
+    expect(a.play).toHaveBeenCalledOnce();
+    settings.video.startPaused = true;
+    const b = mountPlayer(true);
+    b.el.dispatchEvent(new Event("loadedmetadata"));
+    expect(b.play).not.toHaveBeenCalled();
+  });
+
+  it("loops while the loop setting is on", async () => {
+    const { w, el } = mountPlayer(false);
+    expect(el.loop).toBe(false);
+    settings.video.loop = true;
+    await w.vm.$nextTick();
+    expect(el.loop).toBe(true);
+  });
+
+  it("holding runs at the configured rate", async () => {
+    settings.video.holdRate = 3;
+    const { w, el } = mountPlayer(false);
+    await fire(w, w.find("video").element, "pointerdown", { button: 0 });
+    vi.advanceTimersByTime(300);
+    await w.vm.$nextTick();
+    expect(el.playbackRate).toBe(3);
+    expect(w.find(".speed-chip").text()).toBe("3x");
+  });
+
+  it("with hold off, a long press is a plain click", async () => {
+    settings.video.holdRate = 0;
+    const { w, el, pause } = mountPlayer(false);
+    const video = w.find("video").element;
+    await fire(w, video, "pointerdown", { button: 0 });
+    vi.advanceTimersByTime(1000);
+    expect(el.playbackRate).toBe(1);
+    await fire(w, video, "pointerup");
+    await fire(w, video, "click");
+    expect(pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the controls after the configured delay", async () => {
+    settings.video.hideControlsMs = 4000;
+    const { w } = mountPlayer(false);
+    await w.find(".video-player").trigger("pointermove");
+    vi.advanceTimersByTime(3999);
+    await w.vm.$nextTick();
+    expect(w.find(".controls").classes()).not.toContain("hidden");
+    vi.advanceTimersByTime(1);
+    await w.vm.$nextTick();
+    expect(w.find(".controls").classes()).toContain("hidden");
+  });
+
+  it("never hides the controls on a timer when set to never, but leaving still hides them", async () => {
+    settings.video.hideControlsMs = 0;
+    const { w } = mountPlayer(false);
+    await w.find(".video-player").trigger("pointermove");
+    vi.advanceTimersByTime(60_000);
+    await w.vm.$nextTick();
+    expect(w.find(".controls").classes()).not.toContain("hidden");
+    await w.find(".video-player").trigger("pointerleave");
+    expect(w.find(".controls").classes()).toContain("hidden");
+  });
+
+  it("the cap starts checked in each trim session when on by default, and can be unchecked", async () => {
+    settings.video.capByDefault = true;
+    const { w, el } = mountPlayer(true);
+    Object.defineProperty(el, "duration", { value: 30, configurable: true });
+    const trimBtn = w.find("button[title='Trim clip']");
+    await trimBtn.trigger("click");
+    const box = () => w.find(".cap input").element as HTMLInputElement;
+    expect(box().checked).toBe(true);
+    await w.find(".cap input").setValue(false);
+    expect(box().checked).toBe(false);
+    await w.find("button[title='Trim clip']").trigger("click");
+    await w.find("button[title='Trim clip']").trigger("click");
+    expect(box().checked).toBe(true);
+  });
+
+  it("the cap starts unchecked by default", async () => {
+    const { w, el } = mountPlayer(true);
+    Object.defineProperty(el, "duration", { value: 30, configurable: true });
+    await w.find("button[title='Trim clip']").trigger("click");
+    expect((w.find(".cap input").element as HTMLInputElement).checked).toBe(false);
+  });
+});
+
 describe("VideoPlayer volume bar", () => {
   beforeEach(() => {
     localStorage.clear();

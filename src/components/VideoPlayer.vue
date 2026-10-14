@@ -114,6 +114,7 @@ function toggleTrim() {
   const el = video.value;
   if (!el || !Number.isFinite(el.duration)) return;
   el.pause();
+  capped.value = settings.video.capByDefault;
   trim.enter(el.duration);
 }
 
@@ -329,9 +330,8 @@ function setSpeed(v: number) {
 }
 
 // hold-to-fast-forward: pressing on a playing video for longer than a click
-// runs it at 2x until release; a short press still toggles play/pause
+// runs it at the hold rate until release; a short press still toggles play/pause
 const HOLD_MS = 250;
-const HOLD_RATE = 2;
 const holding = ref(false);
 let holdTimer = 0;
 let holdFired = false;
@@ -340,12 +340,13 @@ function onVideoDown(e: PointerEvent) {
   if (e.button !== 0) return;
   clearTimeout(holdTimer);
   holdFired = false;
+  if (!settings.video.holdRate) return;
   holdTimer = window.setTimeout(() => {
     const el = video.value;
     if (!el || el.paused || shuttle.value !== null) return;
     holding.value = true;
     holdFired = true;
-    el.playbackRate = HOLD_RATE;
+    el.playbackRate = settings.video.holdRate;
   }, HOLD_MS);
 }
 
@@ -354,7 +355,7 @@ function endHold() {
   if (!holding.value) return;
   holding.value = false;
   const el = video.value;
-  // shuttle may have started mid-hold and captured 2x as its restore rate
+  // shuttle may have started mid-hold and captured the hold rate as its restore rate
   if (el && shuttle.value === null) el.playbackRate = speed.value;
   priorRate = speed.value;
 }
@@ -369,7 +370,7 @@ function onVideoClick() {
 }
 
 const chipLabel = computed(() => {
-  if (holding.value) return HOLD_RATE + "x";
+  if (holding.value) return settings.video.holdRate + "x";
   if (shuttle.value === "fwd") return "0.1x";
   if (shuttle.value === "rev") return "-0.1x";
   return speed.value + "x";
@@ -430,9 +431,9 @@ function flashBadge(kind: "play" | "pause") {
   flashTimer = window.setTimeout(() => (badge.value = null), 200);
 }
 
-// on-screen ten second skips clamp at the clip edges and never change files
-function seekTen(dir: -1 | 1) {
-  seekBy(dir * 10);
+// on-screen skips clamp at the clip edges and never change files
+function skip(dir: -1 | 1) {
+  seekBy(dir * settings.video.skipStep);
 }
 
 // controls live over the video and only show while the mouse is around
@@ -442,7 +443,8 @@ let hideTimer = 0;
 function showControls() {
   controlsVisible.value = true;
   clearTimeout(hideTimer);
-  hideTimer = window.setTimeout(() => (controlsVisible.value = false), 2500);
+  const ms = settings.video.hideControlsMs;
+  if (ms) hideTimer = window.setTimeout(() => (controlsVisible.value = false), ms);
 }
 
 function hideControls() {
@@ -494,7 +496,7 @@ function onLoadedMetadata() {
   el.playbackRate = speed.value;
   el.volume = volume.value;
   el.muted = muted.value;
-  el.play().catch(() => {});
+  if (!settings.video.startPaused) el.play().catch(() => {});
 }
 
 function onTimeUpdate() {
@@ -666,6 +668,7 @@ const progress = computed(() =>
       <video
         ref="video"
         :src="src"
+        :loop="settings.video.loop"
         class="video-el"
         @loadedmetadata="onLoadedMetadata"
         @timeupdate="onTimeUpdate"
@@ -768,19 +771,19 @@ const progress = computed(() =>
             </div>
           </span>
         </div>
-        <button class="tbtn skip" title="Back 10 seconds" @click="seekTen(-1)">
+        <button class="tbtn skip" :title="`Back ${settings.video.skipStep} seconds`" @click="skip(-1)">
           <span class="skip-wrap">
             <i class="ph ph-arrow-counter-clockwise" />
-            <span class="skip-num">10</span>
+            <span class="skip-num">{{ settings.video.skipStep }}</span>
           </span>
         </button>
         <button class="play-btn" title="Play / pause (Space)" @click="togglePlay">
           <i class="ph-fill" :class="playing ? 'ph-pause' : 'ph-play'" />
         </button>
-        <button class="tbtn skip" title="Forward 10 seconds" @click="seekTen(1)">
+        <button class="tbtn skip" :title="`Forward ${settings.video.skipStep} seconds`" @click="skip(1)">
           <span class="skip-wrap">
             <i class="ph ph-arrow-clockwise" />
-            <span class="skip-num">10</span>
+            <span class="skip-num">{{ settings.video.skipStep }}</span>
           </span>
         </button>
         <div class="cluster right">

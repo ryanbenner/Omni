@@ -1,4 +1,5 @@
 import type { AppAction, StageKind, ViewerAction } from "../types";
+import { settings } from "./settings";
 
 export type Command =
   | { target: "app"; action: AppAction }
@@ -88,7 +89,7 @@ export function resolveKey(
   }
 
   // video
-  const step = e.shiftKey ? 10 : 5;
+  const step = settings.video.skipStep * (e.shiftKey ? 2 : 1);
   switch (key) {
     case "ArrowLeft":
       return {

@@ -2,11 +2,11 @@ import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import SettingNumber from "../settings/SettingNumber.vue";
 
-function mountNumber(value = 50) {
+function mountNumber(value = 6) {
   const w = mount(SettingNumber, {
     props: {
-      range: "video.clipCapMb" as const,
-      unit: "MB",
+      range: "collage.memoryCapGb" as const,
+      unit: "GB",
       modelValue: value,
       "onUpdate:modelValue": (v: number) => w.setProps({ modelValue: v }),
     },
@@ -22,10 +22,10 @@ describe("SettingNumber", () => {
   it("shows the value, the unit and the range bounds", () => {
     const w = mountNumber();
     const input = w.find("input");
-    expect((input.element as HTMLInputElement).value).toBe("50");
+    expect((input.element as HTMLInputElement).value).toBe("6");
     expect(input.attributes("min")).toBe("1");
-    expect(input.attributes("max")).toBe("500");
-    expect(w.find(".unit").text()).toBe("MB");
+    expect(input.attributes("max")).toBe("32");
+    expect(w.find(".unit").text()).toBe("GB");
   });
 
   it("rounds a decimal to an integer on blur", async () => {
@@ -43,7 +43,7 @@ describe("SettingNumber", () => {
     const w = mountNumber();
     await w.find("input").setValue("900");
     await w.find("input").trigger("change");
-    expect(last(w)).toBe(500);
+    expect(last(w)).toBe(32);
     await w.find("input").setValue("0");
     await w.find("input").trigger("change");
     expect(last(w)).toBe(1);
@@ -54,7 +54,7 @@ describe("SettingNumber", () => {
     await w.find("input").setValue("");
     await w.find("input").trigger("blur");
     expect(w.emitted("update:modelValue")).toBeUndefined();
-    expect((w.find("input").element as HTMLInputElement).value).toBe("50");
+    expect((w.find("input").element as HTMLInputElement).value).toBe("6");
   });
 
   it("follows an outside model change", async () => {
@@ -66,10 +66,10 @@ describe("SettingNumber", () => {
   it("commits a typed draft when it unmounts, so escape keeps the value", async () => {
     const w = mountNumber();
     const input = w.find("input");
-    (input.element as HTMLInputElement).value = "75";
+    (input.element as HTMLInputElement).value = "20";
     await input.trigger("input");
     expect(w.emitted("update:modelValue")).toBeUndefined();
     w.unmount();
-    expect(last(w)).toBe(75);
+    expect(last(w)).toBe(20);
   });
 });

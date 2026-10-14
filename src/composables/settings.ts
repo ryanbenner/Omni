@@ -7,6 +7,12 @@ export const ZOOM_STEP_NAMES: readonly ZoomStep[] = ["fine", "normal", "coarse"]
 export type ReopenMode = "off" | "folder" | "file";
 export const REOPEN_MODES: readonly ReopenMode[] = ["off", "folder", "file"];
 
+export const SKIP_STEPS: readonly number[] = [3, 5, 10, 15];
+// 0 turns hold-to-speed-up off
+export const HOLD_RATES: readonly number[] = [1.5, 2, 3, 0];
+// 0 never hides the controls on a timer
+export const HIDE_DELAYS_MS: readonly number[] = [1500, 2500, 4000, 8000, 0];
+
 export interface Settings {
   general: {
     sidebarAtLaunch: boolean;
@@ -23,13 +29,20 @@ export interface Settings {
     volume: number; // 0..1
     muted: boolean;
     clipCapMb: number;
+    skipStep: number; // member of SKIP_STEPS
+    startPaused: boolean;
+    loop: boolean;
+    holdRate: number; // member of HOLD_RATES
+    hideControlsMs: number; // member of HIDE_DELAYS_MS
+    capByDefault: boolean;
   };
   image: { zoomStep: ZoomStep };
   collage: { memoryCapGb: number; jpgQuality: number };
 }
 
 // every default is the value the code hardcoded before settings existed,
-// except offerResume, which starts off
+// except offerResume, which starts off, and skipStep, which the skip buttons
+// shared at 10 while the arrow keys used 5
 export const DEFAULTS: Settings = {
   general: {
     sidebarAtLaunch: true,
@@ -40,14 +53,26 @@ export const DEFAULTS: Settings = {
     confirmDelete: true,
     openPinFirst: false,
   },
-  video: { defaultSpeed: 1, persistentVolume: false, volume: 1, muted: false, clipCapMb: 50 },
+  video: {
+    defaultSpeed: 1,
+    persistentVolume: false,
+    volume: 1,
+    muted: false,
+    clipCapMb: 50,
+    skipStep: 5,
+    startPaused: false,
+    loop: false,
+    holdRate: 2,
+    hideControlsMs: 2500,
+    capByDefault: false,
+  },
   image: { zoomStep: "normal" },
   collage: { memoryCapGb: 6, jpgQuality: 92 },
 };
 
 // integer fields shown as number inputs; the loader and SettingNumber both read this
 export const RANGES = {
-  "video.clipCapMb": { min: 1, max: 500 },
+  "video.clipCapMb": { min: 10, max: 100 },
   "collage.memoryCapGb": { min: 1, max: 32 },
   "collage.jpgQuality": { min: 50, max: 100 },
 } as const;
@@ -95,6 +120,14 @@ function apply(saved: unknown) {
   }
   if (isBool(v.muted)) settings.video.muted = v.muted;
   if (inRange(v.clipCapMb, "video.clipCapMb")) settings.video.clipCapMb = v.clipCapMb;
+  if (typeof v.skipStep === "number" && SKIP_STEPS.includes(v.skipStep)) settings.video.skipStep = v.skipStep;
+  if (isBool(v.startPaused)) settings.video.startPaused = v.startPaused;
+  if (isBool(v.loop)) settings.video.loop = v.loop;
+  if (typeof v.holdRate === "number" && HOLD_RATES.includes(v.holdRate)) settings.video.holdRate = v.holdRate;
+  if (typeof v.hideControlsMs === "number" && HIDE_DELAYS_MS.includes(v.hideControlsMs)) {
+    settings.video.hideControlsMs = v.hideControlsMs;
+  }
+  if (isBool(v.capByDefault)) settings.video.capByDefault = v.capByDefault;
   if (typeof i.zoomStep === "string" && ZOOM_STEP_NAMES.includes(i.zoomStep as ZoomStep)) {
     settings.image.zoomStep = i.zoomStep as ZoomStep;
   }

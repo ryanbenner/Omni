@@ -112,6 +112,52 @@ describe("settings store", () => {
     });
   });
 
+  it("video gains skip, start, loop, hold, hide and cap fields with today's defaults", () => {
+    loadSettings();
+    expect(settings.video).toEqual({
+      defaultSpeed: 1,
+      persistentVolume: false,
+      volume: 1,
+      muted: false,
+      clipCapMb: 50,
+      skipStep: 5,
+      startPaused: false,
+      loop: false,
+      holdRate: 2,
+      hideControlsMs: 2500,
+      capByDefault: false,
+    });
+  });
+
+  it("validates the new video fields one by one", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        video: { skipStep: 15, startPaused: true, loop: "yes", holdRate: 0, hideControlsMs: 0, capByDefault: true, clipCapMb: 100 },
+      }),
+    );
+    loadSettings();
+    expect(settings.video.skipStep).toBe(15);
+    expect(settings.video.startPaused).toBe(true);
+    expect(settings.video.loop).toBe(false);
+    expect(settings.video.holdRate).toBe(0);
+    expect(settings.video.hideControlsMs).toBe(0);
+    expect(settings.video.capByDefault).toBe(true);
+    expect(settings.video.clipCapMb).toBe(100);
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ video: { skipStep: 7, holdRate: 4, hideControlsMs: 3000, clipCapMb: 9 } }),
+    );
+    loadSettings();
+    expect(settings.video.skipStep).toBe(5);
+    expect(settings.video.holdRate).toBe(2);
+    expect(settings.video.hideControlsMs).toBe(2500);
+    expect(settings.video.clipCapMb).toBe(50);
+    localStorage.setItem(KEY, JSON.stringify({ video: { clipCapMb: 101 } }));
+    loadSettings();
+    expect(settings.video.clipCapMb).toBe(50);
+  });
+
   it("validates the new general fields one by one", () => {
     localStorage.setItem(
       KEY,
