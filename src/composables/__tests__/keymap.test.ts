@@ -1,9 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { resolveKey, resolveKeyUp, type Command } from "../keymap";
+import { settings, loadSettings } from "../settings";
 
 const k = (key: string, shiftKey = false) => ({ key, shiftKey });
 
 describe("resolveKey", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
   it("pgup/pgdn navigate files on images and videos", () => {
     expect(resolveKey(k("PageUp"), "video")).toEqual({
       target: "app",
@@ -42,6 +48,12 @@ describe("resolveKey", () => {
   it("shift+arrows on video seek 10s", () => {
     const cmd = resolveKey(k("ArrowRight", true), "video") as Command;
     expect(cmd).toMatchObject({ action: { type: "seek", seconds: 10 } });
+  });
+
+  it("arrows on video seek by the skip step setting, doubled with shift", () => {
+    settings.video.skipStep = 3;
+    expect(resolveKey(k("ArrowRight"), "video")).toMatchObject({ action: { type: "seek", seconds: 3 } });
+    expect(resolveKey(k("ArrowLeft", true), "video")).toMatchObject({ action: { type: "seek", seconds: -6 } });
   });
 
   it("space toggles play on video only", () => {
