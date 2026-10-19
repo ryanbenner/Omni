@@ -14,7 +14,7 @@ export interface ScanResult {
 }
 
 // actions a viewer component may handle; handleAction returns false when
-// the action does not apply so the app can fall back (e.g. arrow -> next file)
+// the action does not apply
 export type ViewerAction =
   | { type: "playPause" }
   | { type: "seek"; seconds: number }

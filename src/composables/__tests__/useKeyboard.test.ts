@@ -50,6 +50,19 @@ describe("useKeyboard", () => {
     w.unmount();
   });
 
+  it("a repeat that resolves to another step does not replace the held direction", () => {
+    settings.keybinds.stepForward = "shift+<";
+    settings.keybinds.stepBack = ",";
+    const { w, handler } = host(() => true);
+    down("<", "Comma", true);
+    handler.mockClear();
+    down(",", "Comma");
+    expect(handler).not.toHaveBeenCalled();
+    up(",", "Comma");
+    expect(handler.mock.calls).toEqual([[stop(1)]]);
+    w.unmount();
+  });
+
   it("window blur stops every held step", () => {
     const { w, handler } = host(() => true);
     down(",", "Comma");

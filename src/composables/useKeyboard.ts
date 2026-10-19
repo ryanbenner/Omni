@@ -24,6 +24,11 @@ export function useKeyboard(
 
   function onKeydown(e: KeyboardEvent) {
     if (!enabled() || isTyping(e)) return;
+    // os key repeat can resolve differently once a modifier is released; keep the original hold
+    if (held.has(e.code)) {
+      e.preventDefault();
+      return;
+    }
     const cmd = resolveKey(e, kind());
     if (cmd) {
       e.preventDefault();
