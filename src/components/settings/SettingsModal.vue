@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { onEscape } from "../../composables/dialogStack";
 import { dirty, openDraft, applyDraft, revertDraft, resetKeybindsDraft } from "../../composables/settingsDraft";
 import { KEYBIND_GROUPS, type Scope } from "../../composables/keybinds";
-import { keybindGroup, keybindJump, keybindPromptOpen } from "./settingsState";
+import { keybindGroup, keybindJump, keybindPromptOpen, unsavedPromptOpen } from "./settingsState";
 import { SECTIONS, selectedSection, type SectionId } from "./sections";
 import UnsavedSettingsDialog from "./UnsavedSettingsDialog.vue";
 
@@ -29,6 +29,8 @@ function jumpTo(scope: Scope) {
 const pending = ref<{ run: () => void; cancel?: () => void } | null>(null);
 // either prompt makes the nav and page unreachable by Tab
 const blocked = computed(() => !!pending.value || keybindPromptOpen.value);
+// the titlebar and app listen for the prompt through shared state
+watch(pending, (p) => (unsavedPromptOpen.value = p !== null));
 
 function guard(run: () => void, cancel?: () => void) {
   if (!dirty.value) {
@@ -71,6 +73,7 @@ onUnmounted(() => {
   // settings closed from outside while the prompt was up: the parked exit is off
   pending.value?.cancel?.();
   pending.value = null;
+  unsavedPromptOpen.value = false;
 });
 
 defineExpose({ requestClose });

@@ -69,6 +69,7 @@ vi.mock("../CollageWall.vue", () => ({ __esModule: true, default: WallStub }));
 
 import App from "../../App.vue";
 import Sidebar from "../Sidebar.vue";
+import Titlebar from "../Titlebar.vue";
 import Viewer from "../Viewer.vue";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
@@ -589,7 +590,7 @@ describe("App settings", () => {
     await flushPromises();
     expect(w.find(".settings").exists()).toBe(true);
     expect(w.find(".dialog").exists()).toBe(true);
-    await w.find(".dialog-x").trigger("click");
+    await w.find(".dialog .btn-stay").trigger("click");
     await flushPromises();
     expect(w.find(".settings").exists()).toBe(true);
     expect(w.find(".dialog").exists()).toBe(false);
@@ -624,7 +625,7 @@ describe("App settings", () => {
     await flushPromises();
     expect(prevent).toHaveBeenCalled();
     expect(w.find(".dialog").exists()).toBe(true);
-    await w.find(".dialog-x").trigger("click");
+    await w.find(".dialog .btn-stay").trigger("click");
     await first;
     expect(destroyMock).not.toHaveBeenCalled();
     expect(w.find(".settings").exists()).toBe(true);
@@ -668,11 +669,46 @@ describe("App settings", () => {
     w.unmount();
   });
 
+  it("while a settings prompt is up the titlebar is locked", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    expect(w.findComponent(Titlebar).props("locked")).toBe(false);
+    void closeHandlers[0]({ preventDefault: vi.fn() });
+    await flushPromises();
+    expect(w.findComponent(Titlebar).props("locked")).toBe(true);
+    const sidebarOpen = w.findComponent(Titlebar).props("sidebarOpen");
+    await w.find(".tb-sidebar").trigger("click");
+    expect(w.findComponent(Titlebar).props("sidebarOpen")).toBe(sidebarOpen);
+    const prevent = vi.fn();
+    await closeHandlers[0]({ preventDefault: prevent });
+    expect(prevent).toHaveBeenCalled();
+    expect(destroyMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("opening a file from another instance asks first when settings has unsaved edits", async () => {
+    const w = await mountApp();
+    await w.find(".tb-gear").trigger("click");
+    await w.findAll("[role=switch]")[2].trigger("click");
+    singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
+    await flushPromises();
+    expect(w.find(".dialog").exists()).toBe(true);
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    await w.find(".dialog .btn-stay").trigger("click");
+    await flushPromises();
+    expect(w.find(".settings").exists()).toBe(true);
+    expect(invokeMock).not.toHaveBeenCalledWith("scan_media", expect.anything());
+    w.unmount();
+  });
+
   it("settings reopen clean after a second-instance close dropped pending edits", async () => {
     const w = await mountApp();
     await w.find(".tb-gear").trigger("click");
     await w.findAll("[role=switch]")[2].trigger("click");
     singleInstanceHandlers[0]({ payload: ["omni.exe", "/p/a.jpg"] });
+    await flushPromises();
+    await w.find(".dialog .btn-revert").trigger("click");
     await flushPromises();
     expect(w.find(".settings").exists()).toBe(false);
     expect(w.find(".dialog").exists()).toBe(false);

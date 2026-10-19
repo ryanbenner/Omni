@@ -6,7 +6,7 @@ import { selectedSection } from "../settings/sections";
 import { settings, loadSettings } from "../../composables/settings";
 import { openDraft, draft } from "../../composables/settingsDraft";
 import { defaultKeybinds } from "../../composables/keybinds";
-import { keybindGroup, keybindJump, keybindPromptOpen } from "../settings/settingsState";
+import { keybindGroup, keybindJump, keybindPromptOpen, settingsBlocked } from "../settings/settingsState";
 
 describe("SettingsModal", () => {
   beforeEach(() => {
@@ -129,7 +129,7 @@ describe("SettingsModal", () => {
     await w.findAll(".nav-item")[1].trigger("click");
     expect(w.find(".dialog").exists()).toBe(true);
     expect(w.find(".page-title").text()).toBe("General");
-    await w.find(".dialog-x").trigger("click");
+    await w.find(".dialog .btn-stay").trigger("click");
     expect(w.find(".dialog").exists()).toBe(false);
     expect(w.find(".page-title").text()).toBe("General");
     await w.find(".settings-close").trigger("click");
@@ -148,6 +148,20 @@ describe("SettingsModal", () => {
     expect(settings.general.wrapAround).toBe(false);
     expect(w.find(".page-footer").exists()).toBe(true);
     w.unmount();
+  });
+
+  it("the unsaved prompt marks settings blocked until answered", async () => {
+    const w = mount(SettingsModal, { attachTo: document.body });
+    await w.findAll("[role=switch]")[2].trigger("click");
+    expect(settingsBlocked.value).toBe(false);
+    await w.findAll(".nav-item")[1].trigger("click");
+    expect(settingsBlocked.value).toBe(true);
+    await w.find(".dialog .btn-stay").trigger("click");
+    expect(settingsBlocked.value).toBe(false);
+    await w.findAll(".nav-item")[1].trigger("click");
+    expect(settingsBlocked.value).toBe(true);
+    w.unmount();
+    expect(settingsBlocked.value).toBe(false);
   });
 
   it("a backdrop press on the prompt stays put", async () => {
@@ -188,7 +202,7 @@ describe("SettingsModal", () => {
     const stay = vm.requestClose();
     await nextTick();
     expect(w.find(".dialog").exists()).toBe(true);
-    await w.find(".dialog-x").trigger("click");
+    await w.find(".dialog .btn-stay").trigger("click");
     await expect(stay).resolves.toBe(false);
     expect(w.find(".page-footer").exists()).toBe(true);
     const apply = vm.requestClose();
@@ -238,7 +252,7 @@ describe("SettingsModal", () => {
     await w.findAll(".nav-item")[1].trigger("click");
     expect(w.find(".settings-nav").attributes("inert")).toBeDefined();
     expect(w.find(".settings-page").attributes("inert")).toBeDefined();
-    await w.find(".dialog-x").trigger("click");
+    await w.find(".dialog .btn-stay").trigger("click");
     expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
     w.unmount();
   });

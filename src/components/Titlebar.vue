@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-defineProps<{ sidebarOpen: boolean; settingsOpen?: boolean; subtitle?: string }>();
+defineProps<{ sidebarOpen: boolean; settingsOpen?: boolean; subtitle?: string; locked?: boolean }>();
 defineEmits<{ toggleSidebar: []; toggleSettings: [] }>();
 
 const win = getCurrentWindow();
@@ -16,6 +16,8 @@ const win = getCurrentWindow();
     </div>
     <button
       class="tb-icon tb-sidebar"
+      :disabled="locked"
+      :inert="locked || undefined"
       :title="sidebarOpen ? 'Hide file tree' : 'Show file tree'"
       @click="$emit('toggleSidebar')"
     >
@@ -24,6 +26,8 @@ const win = getCurrentWindow();
     <button
       class="tb-icon tb-gear"
       :class="{ active: settingsOpen }"
+      :disabled="locked"
+      :inert="locked || undefined"
       title="Settings"
       @click="$emit('toggleSettings')"
     >
@@ -37,7 +41,13 @@ const win = getCurrentWindow();
       <button class="tb-btn tb-max" title="Maximize" @click="win.toggleMaximize()">
         <i class="ph ph-square" />
       </button>
-      <button class="tb-btn tb-close" title="Close" @click="win.close()">
+      <button
+        class="tb-btn tb-close"
+        title="Close"
+        :disabled="locked"
+        :inert="locked || undefined"
+        @click="win.close()"
+      >
         <i class="ph ph-x" />
       </button>
     </div>

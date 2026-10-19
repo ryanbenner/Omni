@@ -13,6 +13,7 @@ import Sidebar from "./components/Sidebar.vue";
 import SettingsModal from "./components/settings/SettingsModal.vue";
 import { settings } from "./composables/settings";
 import { dirty as settingsDirty } from "./composables/settingsDraft";
+import { settingsBlocked } from "./components/settings/settingsState";
 import { useMediaList } from "./composables/useMediaList";
 import { useKeyboard } from "./composables/useKeyboard";
 import { parentDir } from "./composables/pathUtils";
@@ -271,6 +272,11 @@ function pathFromArgv(argv: string[]): string | null {
 onMounted(async () => {
   window.addEventListener("focus", () => list.resync());
   getCurrentWindow().onCloseRequested(async (e) => {
+    // a settings prompt is waiting on an answer; nothing else may proceed
+    if (settingsBlocked.value) {
+      e.preventDefault();
+      return;
+    }
     // pending settings edits ask first; the collage's own unsaved check follows
     const pendingEdits = settingsOpen.value && settingsDirty.value;
     if (!pendingEdits && !wall.value?.isDirty()) return;
@@ -280,9 +286,10 @@ onMounted(async () => {
     if (wall.value?.isDirty() && !(await askWallToLeave(true))) return;
     await getCurrentWindow().destroy();
   });
-  await listen<string[]>("single-instance", (e) => {
+  await listen<string[]>("single-instance", async (e) => {
     const path = pathFromArgv(e.payload);
     if (path) {
+      if (settingsOpen.value && settingsDirty.value && !(await settingsModal.value!.requestClose())) return;
       settingsOpen.value = false;
       openFile(path);
     }
@@ -330,6 +337,7 @@ defineExpose({ openFile, enterCollage });
     <Titlebar
       :sidebar-open="sidebarOpen"
       :settings-open="settingsOpen"
+      :locked="settingsBlocked"
       :subtitle="collageOpen ? collageStatus : undefined"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @toggle-settings="toggleSettings"
