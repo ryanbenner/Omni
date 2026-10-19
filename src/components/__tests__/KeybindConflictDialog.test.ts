@@ -7,7 +7,7 @@ describe("KeybindConflictDialog", () => {
     document.body.innerHTML = "";
   });
 
-  it("names the key and the action it would take it from, and focuses Overwrite", () => {
+  it("names the key and the action it would take it from, and focuses No", () => {
     const w = mount(KeybindConflictDialog, {
       attachTo: document.body,
       props: { keyLabel: "F", other: "Fullscreen" },
@@ -16,7 +16,7 @@ describe("KeybindConflictDialog", () => {
       "F is already bound to Fullscreen. Overwrite it? Fullscreen will be left with no key.",
     );
     expect(w.findAll(".dialog-actions button").map((b) => b.text())).toEqual(["No", "Overwrite"]);
-    expect(document.activeElement).toBe(w.find(".btn-apply").element);
+    expect(document.activeElement).toBe(w.find(".btn-revert").element);
     w.unmount();
   });
 

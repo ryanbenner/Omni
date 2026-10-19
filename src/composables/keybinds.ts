@@ -72,7 +72,8 @@ export function defaultKeybinds(): Keybinds {
   return Object.fromEntries(ACTIONS.map((a) => [a.id, a.default])) as Keybinds;
 }
 
-const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);
+// keys that can't be a bind on their own
+const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph", "Dead", "Unidentified", "Process", "CapsLock"]);
 
 export function comboFromEvent(e: {
   key: string;

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import SettingsModal from "../settings/SettingsModal.vue";
 import { selectedSection } from "../settings/sections";
@@ -7,6 +7,9 @@ import { settings, loadSettings } from "../../composables/settings";
 import { openDraft, draft } from "../../composables/settingsDraft";
 import { defaultKeybinds } from "../../composables/keybinds";
 import { keybindGroup, keybindJump, keybindPromptOpen, settingsBlocked } from "../settings/settingsState";
+
+// a leaked keybinds page would answer the next test's jump
+enableAutoUnmount(afterEach);
 
 describe("SettingsModal", () => {
   beforeEach(() => {
@@ -298,6 +301,20 @@ describe("SettingsModal", () => {
     await video.trigger("click");
     expect(w.find(".dialog").exists()).toBe(true);
     expect(selectedSection.value).toBe("general");
+    w.unmount();
+  });
+
+  it("a nested item on the keybinds page scrolls without asking, keeping the edit", async () => {
+    selectedSection.value = "keybinds";
+    keybindJump.value = null;
+    const w = mount(SettingsModal, { attachTo: document.body });
+    draft.keybinds.mute = "j";
+    await nextTick();
+    const video = w.findAll(".nav-sub").find((n) => n.text() === "Video Keybinds")!;
+    await video.trigger("click");
+    expect(w.find(".dialog").exists()).toBe(false);
+    expect(keybindGroup.value).toBe("video");
+    expect(draft.keybinds.mute).toBe("j");
     w.unmount();
   });
 

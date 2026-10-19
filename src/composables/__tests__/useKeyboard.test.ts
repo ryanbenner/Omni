@@ -63,6 +63,19 @@ describe("useKeyboard", () => {
     w.unmount();
   });
 
+  it("a held step stops when its key is released inside a text field", () => {
+    const { w, handler } = host(() => true);
+    down(",", "Comma");
+    handler.mockClear();
+    const input = document.createElement("input");
+    input.type = "text";
+    document.body.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: ",", code: "Comma", bubbles: true }));
+    expect(handler).toHaveBeenCalledWith(stop(-1));
+    input.remove();
+    w.unmount();
+  });
+
   it("window blur stops every held step", () => {
     const { w, handler } = host(() => true);
     down(",", "Comma");

@@ -45,7 +45,7 @@ export function useKeyboard(
     handler({ target: "viewer", action: { type: "stepStop", direction } });
   }
   function onKeyup(e: KeyboardEvent) {
-    if (isTyping(e) || !held.has(e.code)) return;
+    if (!held.has(e.code)) return;
     e.preventDefault();
     release(e.code);
   }

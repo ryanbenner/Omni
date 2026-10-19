@@ -3,7 +3,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import SettingsModal from "../settings/SettingsModal.vue";
 import { selectedSection } from "../settings/sections";
-import { keybindPromptOpen } from "../settings/settingsState";
+import { keybindGroup, keybindJump, keybindPromptOpen } from "../settings/settingsState";
 import { settings, loadSettings } from "../../composables/settings";
 import { draft, openDraft } from "../../composables/settingsDraft";
 import { ACTIONS, type Scope } from "../../composables/keybinds";
@@ -237,5 +237,37 @@ describe("KeybindsSettings", () => {
     w = null;
     expect(keybindPromptOpen.value).toBe(false);
     expect(document.querySelector(".dialog")).toBeNull();
+  });
+
+  it("the unsaved prompt ends listening, so its Enter is not bound", async () => {
+    open();
+    draft.keybinds.fullscreen = "g";
+    await row("video", "Mute").trigger("click");
+    await w!.findAll(".nav-item")[0].trigger("click"); // general, with edits pending
+    expect(w!.find(".dialog").exists()).toBe(true);
+    const ev = await press({ key: "Enter" });
+    expect(ev.defaultPrevented).toBe(false);
+    expect(draft.keybinds.mute).toBe("m");
+    expect(w!.findAll(".keybind-row.listening")).toHaveLength(0);
+  });
+
+  it("mounting with no pending jump picks the group from the scroll position", () => {
+    keybindJump.value = null;
+    keybindGroup.value = "collage";
+    open();
+    expect(keybindGroup.value).toBe("general");
+  });
+
+  it("the scroll caused by a jump does not overwrite the group it set", async () => {
+    keybindJump.value = null;
+    open();
+    const body = w!.find(".page-body").element;
+    await w!.findAll(".nav-sub").find((n) => n.text() === "Image Keybinds")!.trigger("click");
+    expect(keybindGroup.value).toBe("image");
+    body.dispatchEvent(new Event("scroll"));
+    expect(keybindGroup.value).toBe("image");
+    await new Promise((r) => requestAnimationFrame(r));
+    body.dispatchEvent(new Event("scroll"));
+    expect(keybindGroup.value).toBe("general");
   });
 });

@@ -5,12 +5,12 @@ import { onEscape } from "../../composables/dialogStack";
 defineProps<{ keyLabel: string; other: string }>();
 const emit = defineEmits<{ overwrite: []; cancel: [] }>();
 
-const overwriteBtn = ref<HTMLButtonElement | null>(null);
+const noBtn = ref<HTMLButtonElement | null>(null);
 let offEscape: (() => void) | null = null;
 
 onMounted(() => {
   offEscape = onEscape(() => emit("cancel"));
-  overwriteBtn.value?.focus();
+  noBtn.value?.focus();
 });
 onUnmounted(() => offEscape?.());
 
@@ -27,8 +27,8 @@ function onBackdrop(e: Event) {
         {{ keyLabel }} is already bound to {{ other }}. Overwrite it? {{ other }} will be left with no key.
       </p>
       <div class="dialog-actions">
-        <button class="btn-revert" @click="emit('cancel')">No</button>
-        <button ref="overwriteBtn" class="btn-apply" @click="emit('overwrite')">Overwrite</button>
+        <button ref="noBtn" class="btn-revert" @click="emit('cancel')">No</button>
+        <button class="btn-apply" @click="emit('overwrite')">Overwrite</button>
       </div>
     </div>
   </div>

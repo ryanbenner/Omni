@@ -14,7 +14,7 @@ import {
   type Scope,
 } from "../../composables/keybinds";
 import { mostVisible } from "../../composables/scrollSpy";
-import { keybindGroup, keybindJump, keybindPromptOpen } from "./settingsState";
+import { keybindGroup, keybindJump, keybindPromptOpen, unsavedPromptOpen } from "./settingsState";
 import KeybindConflictDialog from "./KeybindConflictDialog.vue";
 
 const groups = KEYBIND_GROUPS.map((g) => ({ ...g, actions: ACTIONS.filter((a) => a.scope === g.scope) }));
@@ -39,6 +39,11 @@ function stop() {
   offEscape = null;
   window.removeEventListener("keydown", onKey, true);
 }
+
+// the page stays mounted under the unsaved prompt; its Enter must not be bound
+watch(unsavedPromptOpen, (open) => {
+  if (open) stop();
+});
 
 function onKey(e: KeyboardEvent) {
   if (e.key === "Escape") return; // onEscape cancels
@@ -84,8 +89,11 @@ function sections() {
   return [...(root.value?.querySelectorAll<HTMLElement>("section[data-scope]") ?? [])];
 }
 
+// the scroll a jump causes would overwrite the group it just set
+let jumping = false;
+
 function onScroll() {
-  if (!scroller) return;
+  if (!scroller || jumping) return;
   const view = scroller.getBoundingClientRect();
   const items = sections().map((el) => {
     const r = el.getBoundingClientRect();
@@ -103,6 +111,8 @@ function jump() {
     // the body's 28px top padding stays above the heading
     scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 28;
   }
+  jumping = true;
+  requestAnimationFrame(() => (jumping = false));
   keybindGroup.value = scope;
   keybindJump.value = null;
 }
@@ -113,7 +123,9 @@ onMounted(() => {
   scroller = root.value?.closest<HTMLElement>(".page-body") ?? null;
   scroller?.addEventListener("scroll", onScroll, { passive: true });
   // a jump made before mount (nav click from another section)
-  jump();
+  if (keybindJump.value) jump();
+  // the group lives outside the page, so re-entry would keep a stale one
+  else onScroll();
 });
 
 onUnmounted(() => {

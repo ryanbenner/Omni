@@ -99,7 +99,7 @@ defineExpose({ requestClose });
             :key="g.scope"
             class="nav-item nav-sub"
             :class="{ active: selectedSection === 'keybinds' && keybindGroup === g.scope }"
-            @click="guard(() => jumpTo(g.scope))"
+            @click="selectedSection === 'keybinds' ? jumpTo(g.scope) : guard(() => jumpTo(g.scope))"
           >
             <span>{{ g.label }}</span>
           </button>

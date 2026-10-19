@@ -31,6 +31,9 @@ describe("keybinds", () => {
     expect(comboFromEvent({ key: "q", shiftKey: false, altKey: true })).toBe("alt+q");
     expect(comboFromEvent({ key: "Shift", shiftKey: true })).toBeNull();
     expect(comboFromEvent({ key: "Control", shiftKey: false, ctrlKey: true })).toBeNull();
+    for (const key of ["AltGraph", "Dead", "Unidentified", "Process", "CapsLock"]) {
+      expect(comboFromEvent({ key, shiftKey: false })).toBeNull();
+    }
   });
   it("formats combos for display", () => {
     expect(formatCombo("ctrl+shift+s")).toBe("Ctrl+Shift+S");
