@@ -14,13 +14,12 @@ export interface ScanResult {
 }
 
 // actions a viewer component may handle; handleAction returns false when
-// the action does not apply so the app can fall back (e.g. arrow -> next file)
+// the action does not apply
 export type ViewerAction =
   | { type: "playPause" }
   | { type: "seek"; seconds: number }
-  | { type: "frameStep"; frames: number }
-  | { type: "shuttleStart"; direction: 1 | -1 }
-  | { type: "shuttleStop"; direction: 1 | -1 }
+  | { type: "stepStart"; direction: 1 | -1 }
+  | { type: "stepStop"; direction: 1 | -1 }
   | { type: "toggleMute" }
   | { type: "toggleFullscreen" }
   | { type: "rotate" }

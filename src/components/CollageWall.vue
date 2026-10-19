@@ -11,6 +11,7 @@ import { validateArea } from "../composables/collageExport";
 import { writeCollage, COLLAGE_EXT } from "../composables/collageFile";
 import { joinPath, parentDir } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { keyHint } from "../composables/keymap";
 import CollageItem from "./CollageItem.vue";
 import CollageTabs from "./CollageTabs.vue";
 import ExportPreview from "./ExportPreview.vue";
@@ -485,41 +486,41 @@ defineExpose({
         <button
           class="pill-btn lock"
           :class="{ on: collage.lockAspect.value }"
-          :data-tip="collage.lockAspect.value ? 'Unlock aspect ratio (L)' : 'Lock aspect ratio (L)'"
+          :data-tip="(collage.lockAspect.value ? 'Unlock aspect ratio' : 'Lock aspect ratio') + keyHint('collageLock')"
           @click="collage.toggleLock()"
         >
           <i class="ph" :class="collage.lockAspect.value ? 'ph-lock' : 'ph-lock-open'" />
         </button>
-        <button class="pill-btn" data-tip="Fit all (F)" @click="fitAll">
+        <button class="pill-btn" :data-tip="`Fit all${keyHint('collageFitAll')}`" @click="fitAll">
           <i class="ph ph-frame-corners" />
         </button>
         <button
           class="pill-btn"
-          data-tip="Rotate selected (R)"
+          :data-tip="`Rotate selected${keyHint('collageRotate')}`"
           :disabled="!collage.selectedId.value"
           @click="handleAction({ type: 'rotate' })"
         >
           <i class="ph ph-arrow-clockwise" />
         </button>
         <span class="pill-div" />
-        <button class="pill-btn" :class="{ on: arming }" data-tip="Export area (E)" @click="arming = !arming">
+        <button class="pill-btn" :class="{ on: arming }" :data-tip="`Export area${keyHint('collageExport')}`" @click="arming = !arming">
           <i class="ph ph-selection" />
         </button>
         <span class="pill-div" />
-        <button class="pill-btn" data-tip="Save collage (Ctrl+S)" @click="save">
+        <button class="pill-btn" :data-tip="`Save collage${keyHint('collageSave')}`" @click="save">
           <i class="ph ph-floppy-disk" />
         </button>
-        <button class="pill-btn" data-tip="Save collage as (Ctrl+Shift+S)" @click="saveAs">
+        <button class="pill-btn" :data-tip="`Save collage as${keyHint('collageSaveAs')}`" @click="saveAs">
           <i class="ph ph-floppy-disk-back" />
         </button>
         <span class="pill-div" />
-        <button class="pill-btn" :class="{ on: showMemory }" data-tip="Wall memory (M)" @click="showMemory = !showMemory">
+        <button class="pill-btn" :class="{ on: showMemory }" :data-tip="`Wall memory${keyHint('collageMemory')}`" @click="showMemory = !showMemory">
           <span v-if="showMemory" class="mem-readout">
             {{ fmtBytes(budget.bytes.value) }} · {{ budget.loaded.value }} loaded
           </span>
           <i v-else class="ph ph-memory" />
         </button>
-        <button class="pill-btn on" data-tip="Exit collage mode (C)" @click="emit('exit', lastPath())">
+        <button class="pill-btn on" :data-tip="`Exit collage mode${keyHint('collageExit')}`" @click="emit('exit', lastPath())">
           <i class="ph ph-images" />
         </button>
       </div>

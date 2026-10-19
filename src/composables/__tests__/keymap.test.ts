@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { resolveKey, resolveKeyUp, type Command } from "../keymap";
+import { resolveKey, keyHint } from "../keymap";
 import { settings, loadSettings } from "../settings";
 
-const k = (key: string, shiftKey = false) => ({ key, shiftKey });
+type Mods = { shiftKey?: boolean; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean };
+const k = (key: string, mods: Mods = {}) => ({ key, shiftKey: false, ...mods });
+
+const prev = { target: "app", action: { type: "prevFile" } };
+const next = { target: "app", action: { type: "nextFile" } };
+const viewer = (action: object) => ({ target: "viewer", action });
 
 describe("resolveKey", () => {
   beforeEach(() => {
@@ -10,218 +15,114 @@ describe("resolveKey", () => {
     loadSettings();
   });
 
-  it("pgup/pgdn navigate files on images and videos", () => {
-    expect(resolveKey(k("PageUp"), "video")).toEqual({
-      target: "app",
-      action: { type: "prevFile" },
-    });
-    expect(resolveKey(k("PageDown"), "image")).toEqual({
-      target: "app",
-      action: { type: "nextFile" },
-    });
+  it("returns null with no stage", () => {
+    expect(resolveKey(k("ArrowLeft"), null)).toBeNull();
   });
 
-  it("arrows on images navigate files", () => {
-    expect(resolveKey(k("ArrowLeft"), "image")).toEqual({
-      target: "app",
-      action: { type: "prevFile" },
-    });
-    expect(resolveKey(k("ArrowRight"), "image")).toEqual({
-      target: "app",
-      action: { type: "nextFile" },
-    });
+  it("arrows change files on video, image and pdf, not collage", () => {
+    for (const kind of ["video", "image", "pdf"] as const) {
+      expect(resolveKey(k("ArrowLeft"), kind)).toEqual(prev);
+      expect(resolveKey(k("ArrowRight"), kind)).toEqual(next);
+    }
+    expect(resolveKey(k("ArrowLeft"), "collage")).toBeNull();
   });
 
-  it("arrows on video seek 5s with file-nav fallback", () => {
-    expect(resolveKey(k("ArrowRight"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "seek", seconds: 5 },
-      fallback: { type: "nextFile" },
-    });
-    expect(resolveKey(k("ArrowLeft"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "seek", seconds: -5 },
-      fallback: { type: "prevFile" },
-    });
+  it("pgup/pgdn do nothing by default", () => {
+    for (const kind of ["video", "image", "pdf"] as const) {
+      expect(resolveKey(k("PageUp"), kind)).toBeNull();
+      expect(resolveKey(k("PageDown"), kind)).toBeNull();
+    }
   });
 
-  it("shift+arrows on video seek 10s", () => {
-    const cmd = resolveKey(k("ArrowRight", true), "video") as Command;
-    expect(cmd).toMatchObject({ action: { type: "seek", seconds: 10 } });
-  });
-
-  it("arrows on video seek by the skip step setting, doubled with shift", () => {
+  it("q/e seek by the skip step, shift doubles", () => {
+    expect(resolveKey(k("q"), "video")).toEqual(viewer({ type: "seek", seconds: -5 }));
+    expect(resolveKey(k("Q", { shiftKey: true }), "video")).toEqual(
+      viewer({ type: "seek", seconds: -10 }),
+    );
     settings.video.skipStep = 3;
-    expect(resolveKey(k("ArrowRight"), "video")).toMatchObject({ action: { type: "seek", seconds: 3 } });
-    expect(resolveKey(k("ArrowLeft", true), "video")).toMatchObject({ action: { type: "seek", seconds: -6 } });
+    expect(resolveKey(k("e"), "video")).toEqual(viewer({ type: "seek", seconds: 3 }));
+    expect(resolveKey(k("E", { shiftKey: true }), "video")).toEqual(
+      viewer({ type: "seek", seconds: 6 }),
+    );
   });
 
-  it("space toggles play on video only", () => {
-    expect(resolveKey(k(" "), "video")).toEqual({
-      target: "viewer",
-      action: { type: "playPause" },
-    });
-    expect(resolveKey(k(" "), "image")).toBeNull();
+  it("comma and period start a step", () => {
+    expect(resolveKey(k(","), "video")).toEqual(viewer({ type: "stepStart", direction: -1 }));
+    expect(resolveKey(k("."), "video")).toEqual(viewer({ type: "stepStart", direction: 1 }));
+    expect(resolveKey(k("<", { shiftKey: true }), "video")).toBeNull();
   });
 
-  it("comma/period frame-step, angle brackets start shuttle", () => {
-    expect(resolveKey(k(","), "video")).toEqual({
-      target: "viewer",
-      action: { type: "frameStep", frames: -1 },
-    });
-    expect(resolveKey(k("."), "video")).toEqual({
-      target: "viewer",
-      action: { type: "frameStep", frames: 1 },
-    });
-    expect(resolveKey(k("<", true), "video")).toEqual({
-      target: "viewer",
-      action: { type: "shuttleStart", direction: -1 },
-    });
-    expect(resolveKey(k(">", true), "video")).toEqual({
-      target: "viewer",
-      action: { type: "shuttleStart", direction: 1 },
-    });
+  it("up/down turn pdf pages, home/end jump", () => {
+    expect(resolveKey(k("ArrowUp"), "pdf")).toEqual(viewer({ type: "pageStep", pages: -1 }));
+    expect(resolveKey(k("ArrowDown"), "pdf")).toEqual(viewer({ type: "pageStep", pages: 1 }));
+    expect(resolveKey(k("Home"), "pdf")).toEqual(viewer({ type: "pageJump", to: "first" }));
+    expect(resolveKey(k("End"), "pdf")).toEqual(viewer({ type: "pageJump", to: "last" }));
   });
 
-  it("releasing angle brackets stops the shuttle on video only", () => {
-    expect(resolveKeyUp(k("<", true), "video")).toEqual({
-      target: "viewer",
-      action: { type: "shuttleStop", direction: -1 },
-    });
-    expect(resolveKeyUp(k(">", true), "video")).toEqual({
-      target: "viewer",
-      action: { type: "shuttleStop", direction: 1 },
-    });
-    expect(resolveKeyUp(k(">", true), "image")).toBeNull();
-    expect(resolveKeyUp(k("m"), "video")).toBeNull();
+  it("maps the other per-screen actions", () => {
+    expect(resolveKey(k(" "), "video")).toEqual(viewer({ type: "playPause" }));
+    expect(resolveKey(k("f"), "video")).toEqual(viewer({ type: "toggleFullscreen" }));
+    expect(resolveKey(k("i"), "video")).toEqual(viewer({ type: "setIn" }));
+    expect(resolveKey(k("o"), "video")).toEqual(viewer({ type: "setOut" }));
+    expect(resolveKey(k("Escape"), "video")).toEqual(viewer({ type: "exitTrim" }));
+    expect(resolveKey(k("f"), "image")).toEqual(viewer({ type: "fit" }));
+    expect(resolveKey(k("0"), "image")).toEqual(viewer({ type: "resetZoom" }));
+    expect(resolveKey(k("r"), "image")).toEqual(viewer({ type: "rotate" }));
+    expect(resolveKey(k("c"), "image")).toEqual(viewer({ type: "enterCollage" }));
+    expect(resolveKey(k("f"), "pdf")).toEqual(viewer({ type: "fit" }));
+    expect(resolveKey(k("l"), "collage")).toEqual(viewer({ type: "toggleLock" }));
+    expect(resolveKey(k("r"), "collage")).toEqual(viewer({ type: "rotate" }));
+    expect(resolveKey(k("Delete"), "collage")).toEqual(viewer({ type: "removeSelected" }));
+    expect(resolveKey(k("Escape"), "collage")).toEqual(viewer({ type: "deselect" }));
+    expect(resolveKey(k("f"), "collage")).toEqual(viewer({ type: "fitAll" }));
+    expect(resolveKey(k("0"), "collage")).toEqual(viewer({ type: "resetZoom" }));
+    expect(resolveKey(k("e"), "collage")).toEqual(viewer({ type: "exportArea" }));
+    expect(resolveKey(k("m"), "collage")).toEqual(viewer({ type: "toggleMemory" }));
+    expect(resolveKey(k("c"), "collage")).toEqual(viewer({ type: "exitCollage" }));
   });
 
-  it("m mutes and f fullscreens video; f fits image", () => {
-    expect(resolveKey(k("m"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "toggleMute" },
-    });
-    expect(resolveKey(k("F"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "toggleFullscreen" },
-    });
-    expect(resolveKey(k("f"), "image")).toEqual({
-      target: "viewer",
-      action: { type: "fit" },
-    });
+  it("a rebound key takes effect and the old key stops working", () => {
+    settings.keybinds.mute = "j";
+    expect(resolveKey(k("j"), "video")).toEqual(viewer({ type: "toggleMute" }));
+    expect(resolveKey(k("m"), "video")).toBeNull();
   });
 
-  it("image zoom/rotate keys", () => {
-    expect(resolveKey(k("0"), "image")).toEqual({
-      target: "viewer",
-      action: { type: "resetZoom" },
-    });
-    expect(resolveKey(k("r"), "image")).toEqual({
-      target: "viewer",
-      action: { type: "rotate" },
-    });
-    expect(resolveKey(k("r"), "video")).toBeNull();
+  it("an unset action has no key", () => {
+    settings.keybinds.fullscreen = null;
+    expect(resolveKey(k("f"), "video")).toBeNull();
   });
 
-  it("returns null with no media loaded or for unmapped keys", () => {
-    expect(resolveKey(k("ArrowRight"), null)).toBeNull();
-    expect(resolveKey(k("q"), "video")).toBeNull();
+  it("ctrl and cmd both save the collage", () => {
+    expect(resolveKey(k("s", { ctrlKey: true }), "collage")).toEqual(viewer({ type: "save" }));
+    expect(resolveKey(k("s", { metaKey: true }), "collage")).toEqual(viewer({ type: "save" }));
+    expect(resolveKey(k("S", { ctrlKey: true, shiftKey: true }), "collage")).toEqual(
+      viewer({ type: "saveAs" }),
+    );
   });
 
-  it("i, o and escape map to trim actions on video only", () => {
-    expect(resolveKey(k("i"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "setIn" },
-    });
-    expect(resolveKey(k("O"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "setOut" },
-    });
-    expect(resolveKey(k("Escape"), "video")).toEqual({
-      target: "viewer",
-      action: { type: "exitTrim" },
-    });
-    expect(resolveKey(k("i"), "image")).toBeNull();
-    expect(resolveKey(k("Escape"), "image")).toBeNull();
+  it("modifiers must match exactly", () => {
+    expect(resolveKey(k("M", { shiftKey: true }), "video")).toBeNull();
+    expect(resolveKey(k("f", { ctrlKey: true }), "collage")).toBeNull();
+  });
+
+  it("shift-retry on a rebound seek key doubles it", () => {
+    settings.keybinds.seekBack = "ctrl+q";
+    expect(resolveKey(k("Q", { ctrlKey: true, shiftKey: true }), "video")).toEqual(
+      viewer({ type: "seek", seconds: -10 }),
+    );
   });
 });
 
-describe("collage keys", () => {
-  const c = (key: string, mods: Partial<{ shiftKey: boolean; ctrlKey: boolean }> = {}) => ({
-    key,
-    shiftKey: false,
-    ...mods,
-  });
-  const viewer = (type: string) => ({ target: "viewer", action: { type } });
-
-  it("maps the wall's single keys", () => {
-    expect(resolveKey(c("l"), "collage")).toEqual(viewer("toggleLock"));
-    expect(resolveKey(c("r"), "collage")).toEqual(viewer("rotate"));
-    expect(resolveKey(c("Delete"), "collage")).toEqual(viewer("removeSelected"));
-    expect(resolveKey(c("Backspace"), "collage")).toEqual(viewer("removeSelected"));
-    expect(resolveKey(c("Escape"), "collage")).toEqual(viewer("deselect"));
-    expect(resolveKey(c("f"), "collage")).toEqual(viewer("fitAll"));
-    expect(resolveKey(c("0"), "collage")).toEqual(viewer("resetZoom"));
-    expect(resolveKey(c("e"), "collage")).toEqual(viewer("exportArea"));
-    expect(resolveKey(c("m"), "collage")).toEqual(viewer("toggleMemory"));
-    expect(resolveKey(c("c"), "collage")).toEqual(viewer("exitCollage"));
+describe("keyHint", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
   });
 
-  it("maps ctrl+s and ctrl+shift+s to save and save as", () => {
-    expect(resolveKey(c("s", { ctrlKey: true }), "collage")).toEqual(viewer("save"));
-    expect(resolveKey(c("S", { ctrlKey: true, shiftKey: true }), "collage")).toEqual(viewer("saveAs"));
-    expect(resolveKey(c("s"), "collage")).toBeNull();
-  });
-
-  it("does not navigate files on the wall and does not leak into other kinds", () => {
-    expect(resolveKey(c("PageDown"), "collage")).toBeNull();
-    expect(resolveKey(c("ArrowRight"), "collage")).toBeNull();
-    expect(resolveKey(c("e"), "image")).toBeNull();
-    expect(resolveKey(c("l"), "video")).toBeNull();
-    expect(resolveKeyUp(c("<"), "collage")).toBeNull();
-  });
-
-  it("c on an image enters collage mode", () => {
-    expect(resolveKey(c("c"), "image")).toEqual(viewer("enterCollage"));
-    expect(resolveKey(c("c"), "video")).toBeNull();
-  });
-});
-
-describe("pdf keys", () => {
-  it("pages with pgup/pgdn and home/end, files with arrows", () => {
-    expect(resolveKey(k("PageUp"), "pdf")).toEqual({
-      target: "viewer",
-      action: { type: "pageStep", pages: -1 },
-    });
-    expect(resolveKey(k("PageDown"), "pdf")).toEqual({
-      target: "viewer",
-      action: { type: "pageStep", pages: 1 },
-    });
-    expect(resolveKey(k("Home"), "pdf")).toEqual({
-      target: "viewer",
-      action: { type: "pageJump", to: "first" },
-    });
-    expect(resolveKey(k("End"), "pdf")).toEqual({
-      target: "viewer",
-      action: { type: "pageJump", to: "last" },
-    });
-    expect(resolveKey(k("ArrowLeft"), "pdf")).toEqual({
-      target: "app",
-      action: { type: "prevFile" },
-    });
-    expect(resolveKey(k("ArrowRight"), "pdf")).toEqual({
-      target: "app",
-      action: { type: "nextFile" },
-    });
-  });
-
-  it("f fits, 0 resets, and keys from other kinds do nothing", () => {
-    expect(resolveKey(k("f"), "pdf")).toEqual({ target: "viewer", action: { type: "fit" } });
-    expect(resolveKey(k("0"), "pdf")).toEqual({ target: "viewer", action: { type: "resetZoom" } });
-    expect(resolveKey(k("r"), "pdf")).toBeNull();
-    expect(resolveKey(k("c"), "pdf")).toBeNull();
-    expect(resolveKey(k("ArrowDown"), "pdf")).toBeNull();
-    expect(resolveKey(k(" "), "pdf")).toBeNull();
-    expect(resolveKeyUp(k("<"), "pdf")).toBeNull();
+  it("shows the applied key or nothing", () => {
+    expect(keyHint("imageFit")).toBe(" (F)");
+    expect(keyHint("collageSaveAs")).toBe(" (Ctrl+Shift+S)");
+    settings.keybinds.imageFit = null;
+    expect(keyHint("imageFit")).toBe("");
   });
 });

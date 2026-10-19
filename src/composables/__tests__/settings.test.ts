@@ -1,11 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { nextTick } from "vue";
 import { settings, loadSettings, DEFAULTS } from "../settings";
+import { defaultKeybinds } from "../keybinds";
 
 const KEY = "mv-settings";
 
 describe("settings store", () => {
   beforeEach(() => localStorage.clear());
+
+  it("keybinds start at the defaults when nothing is saved", () => {
+    loadSettings();
+    expect(settings.keybinds).toEqual(defaultKeybinds());
+  });
+
+  it("loads saved keybinds through validation", () => {
+    localStorage.setItem(KEY, JSON.stringify({ keybinds: { mute: "f", seekBack: "shift+j" } }));
+    loadSettings();
+    expect(settings.keybinds.mute).toBe("f");
+    expect(settings.keybinds.fullscreen).toBeNull();
+    expect(settings.keybinds.seekBack).toBe("q"); // shift on seek is invalid, default kept
+  });
+
+  it("a keybinds section that is not an object gives the defaults", () => {
+    localStorage.setItem(KEY, JSON.stringify({ keybinds: [] }));
+    loadSettings();
+    expect(settings.keybinds).toEqual(defaultKeybinds());
+  });
 
   it("starts from the defaults when nothing is saved", () => {
     loadSettings();

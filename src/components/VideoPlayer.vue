@@ -17,6 +17,7 @@ import {
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { keyHint } from "../composables/keymap";
 import { onEscape } from "../composables/dialogStack";
 import { usePersistentVolume } from "../composables/usePersistentVolume";
 
@@ -257,14 +258,12 @@ const failureHint = ref("");
 const speed = ref(settings.video.defaultSpeed);
 
 const FRAME = 1 / 60;
-const EDGE = 0.05;
 const SHUTTLE_RATE = 0.1;
 
-// hold-to-shuttle: > plays at 10% speed, < steps backwards at 10% speed
-// (video elements cannot play in reverse, so rev is a seek loop)
+// holding a step key past STEP_HOLD_MS goes slow motion: forward plays at 10% speed,
+// backward steps at 10% speed (video elements cannot play in reverse, so rev is a seek loop)
 const shuttle = ref<"fwd" | "rev" | null>(null);
 let priorRate = settings.video.defaultSpeed;
-let priorPaused = false;
 let revRaf = 0;
 let revLastTs = 0;
 
@@ -290,7 +289,6 @@ function startShuttle(direction: 1 | -1) {
   if (shuttle.value === mode) return;
   if (shuttle.value === null) {
     priorRate = el.playbackRate;
-    priorPaused = el.paused;
   }
   stopRevLoop();
   shuttle.value = mode;
@@ -312,11 +310,57 @@ function stopShuttle(direction: 1 | -1) {
   stopRevLoop();
   shuttle.value = null;
   el.playbackRate = priorRate;
-  if (priorPaused || (trim.active.value && el.currentTime >= trim.outSec.value - 0.01)) el.pause();
-  else el.play().catch(() => {});
+  el.pause();
+}
+
+const STEP_HOLD_MS = 250;
+// held step keys in press order: the most recent one owns the video
+let stepOrder: (1 | -1)[] = [];
+const stepTimers: Record<string, number> = {};
+const stepPassed: Record<string, boolean> = {};
+
+function stepStart(direction: 1 | -1) {
+  const el = video.value;
+  if (!el || stepOrder.includes(direction)) return;
+  const prev = stepOrder[stepOrder.length - 1];
+  if (prev) stopShuttle(prev);
+  stepOrder.push(direction);
+  stepPassed[direction] = false;
+  el.pause();
+  seekBy(direction * FRAME);
+  clampToTrim(el);
+  stepTimers[direction] = window.setTimeout(() => {
+    stepPassed[direction] = true;
+    if (stepOrder[stepOrder.length - 1] === direction) startShuttle(direction);
+  }, STEP_HOLD_MS);
+}
+
+function stepStop(direction: 1 | -1) {
+  if (!stepOrder.includes(direction)) return;
+  const wasOwner = stepOrder[stepOrder.length - 1] === direction;
+  stepOrder = stepOrder.filter((d) => d !== direction);
+  clearTimeout(stepTimers[direction]);
+  if (!wasOwner) return;
+  stopShuttle(direction);
+  video.value?.pause();
+  // hand the video back to the key still held, past its threshold or not
+  const next = stepOrder[stepOrder.length - 1];
+  if (next && stepPassed[next]) startShuttle(next);
+}
+
+function clearSteps() {
+  stepOrder.forEach((d) => clearTimeout(stepTimers[d]));
+  stepOrder = [];
+}
+
+function clampToTrim(el: HTMLVideoElement) {
+  if (trim.active.value) {
+    el.currentTime = Math.min(trim.outSec.value, Math.max(trim.inSec.value, el.currentTime));
+  }
 }
 
 function clearShuttle() {
+  clearSteps();
   stopRevLoop();
   shuttle.value = null;
 }
@@ -463,6 +507,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   wrapObserver?.disconnect();
+  clearSteps();
   stopRevLoop();
   clearTimeout(holdTimer);
   clearTimeout(hideTimer);
@@ -589,6 +634,11 @@ function toggleFullscreen() {
 }
 
 function handleAction(action: ViewerAction): boolean {
+  // release must clear held state even when the video is unavailable
+  if (action.type === "stepStop") {
+    stepStop(action.direction);
+    return true;
+  }
   const el = video.value;
   if (!el || failed.value) return false;
   switch (action.type) {
@@ -596,33 +646,12 @@ function handleAction(action: ViewerAction): boolean {
       togglePlay();
       return true;
     case "seek": {
-      // paused at the relevant edge means the user is done: let the
-      // app fall back to prev/next file per spec (never while trimming,
-      // so arrows can't bounce the app to a different file mid-trim)
-      if (!trim.active.value && el.paused && action.seconds < 0 && el.currentTime <= EDGE)
-        return false;
-      if (
-        !trim.active.value &&
-        el.paused &&
-        action.seconds > 0 &&
-        el.currentTime >= el.duration - EDGE
-      )
-        return false;
       seekBy(action.seconds);
-      if (trim.active.value) {
-        el.currentTime = Math.min(trim.outSec.value, Math.max(trim.inSec.value, el.currentTime));
-      }
+      clampToTrim(el);
       return true;
     }
-    case "frameStep":
-      el.pause();
-      seekBy(action.frames * FRAME);
-      return true;
-    case "shuttleStart":
-      startShuttle(action.direction);
-      return true;
-    case "shuttleStop":
-      stopShuttle(action.direction);
+    case "stepStart":
+      stepStart(action.direction);
       return true;
     case "toggleMute":
       toggleMute();
@@ -777,7 +806,7 @@ const progress = computed(() =>
             <span class="skip-num">{{ settings.video.skipStep }}</span>
           </span>
         </button>
-        <button class="play-btn" title="Play / pause (Space)" @click="togglePlay">
+        <button class="play-btn" :title="`Play / pause${keyHint('playPause')}`" @click="togglePlay">
           <i class="ph-fill" :class="playing ? 'ph-pause' : 'ph-play'" />
         </button>
         <button class="tbtn skip" :title="`Forward ${settings.video.skipStep} seconds`" @click="skip(1)">
@@ -787,7 +816,7 @@ const progress = computed(() =>
           </span>
         </button>
         <div class="cluster right">
-          <button class="tbtn" title="Mute (M)" @click="toggleMute">
+          <button class="tbtn" :title="`Mute${keyHint('mute')}`" @click="toggleMute">
             <i class="ph" :class="muted || volume === 0 ? 'ph-speaker-slash' : 'ph-speaker-high'" />
           </button>
           <input
@@ -807,7 +836,7 @@ const progress = computed(() =>
           >
             <i class="ph ph-scissors" />
           </button>
-          <button class="tbtn" title="Fullscreen (F)" @click="toggleFullscreen">
+          <button class="tbtn" :title="`Fullscreen${keyHint('fullscreen')}`" @click="toggleFullscreen">
             <i class="ph ph-corners-out" />
           </button>
         </div>

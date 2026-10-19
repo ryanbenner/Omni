@@ -27,6 +27,18 @@ describe("Titlebar", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("locked disables the sidebar toggle, gear and close but not minimize or maximize", async () => {
+    const w = mount(Titlebar, { props: { sidebarOpen: true, locked: true } });
+    for (const c of [".tb-sidebar", ".tb-gear", ".tb-close"]) {
+      expect(w.find(c).attributes("disabled")).toBeDefined();
+      expect(w.find(c).attributes("inert")).toBeDefined();
+    }
+    for (const c of [".tb-min", ".tb-max"]) {
+      expect(w.find(c).attributes("disabled")).toBeUndefined();
+      expect(w.find(c).attributes("inert")).toBeUndefined();
+    }
+  });
+
   it("has a drag region", () => {
     const w = mount(Titlebar, { props: { sidebarOpen: true } });
     expect(w.find("[data-tauri-drag-region]").exists()).toBe(true);

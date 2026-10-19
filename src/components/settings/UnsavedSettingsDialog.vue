@@ -22,13 +22,11 @@ function onBackdrop(e: Event) {
 <template>
   <div class="dialog-backdrop" @pointerdown.stop="onBackdrop" @wheel.stop>
     <div class="dialog unsaved-settings" role="dialog" aria-label="Unsaved changes">
-      <button class="dialog-x" title="Close" @click="emit('stay')">
-        <i class="ph ph-x" />
-      </button>
       <p class="dialog-title">Unsaved changes</p>
       <p class="dialog-body">Your changes will be lost unless you apply them.</p>
       <div class="dialog-actions">
-        <button class="btn-revert" @click="emit('discard')">Don't Save</button>
+        <button class="btn-revert" @click="emit('discard')">Revert</button>
+        <button class="btn-revert btn-stay" @click="emit('stay')">Continue editing</button>
         <button ref="applyBtn" class="btn-apply" @click="emit('apply')">Apply</button>
       </div>
     </div>
@@ -36,13 +34,6 @@ function onBackdrop(e: Event) {
 </template>
 
 <style scoped>
-.unsaved-settings {
-  position: relative;
-  padding-right: 44px;
-}
-.unsaved-settings .dialog-actions {
-  margin-right: -24px;
-}
 .unsaved-settings .btn-apply,
 .unsaved-settings .btn-revert {
   min-width: 96px;

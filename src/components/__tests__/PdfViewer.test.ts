@@ -447,3 +447,15 @@ describe("PdfViewer bars", () => {
     expect(el.scrollLeft).toBeCloseTo(contentW - VP.w);
   });
 });
+
+describe("PdfViewer tooltips", () => {
+  it("tooltips show the current key and drop it when unset", async () => {
+    settings.keybinds.pdfFit = "w";
+    const w = await mountViewer();
+    const tip = () => w.findAll(".pill-btn").map((b) => b.attributes("data-tip"));
+    expect(tip()).toContain("Fit width (W)");
+    settings.keybinds.pdfFit = null;
+    await w.vm.$nextTick();
+    expect(tip()).toContain("Fit width");
+  });
+});

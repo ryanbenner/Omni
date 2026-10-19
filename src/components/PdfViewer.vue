@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { MediaItem, ViewerAction } from "../types";
 import { settings } from "../composables/settings";
+import { keyHint } from "../composables/keymap";
 import { openPdf, type PdfHandle } from "../composables/pdfDocument";
 import {
   GAP,
@@ -443,7 +444,7 @@ defineExpose({ handleAction });
         <i class="ph ph-magnifying-glass-plus" />
       </button>
       <span class="pill-div" />
-      <button class="pill-btn" data-tip="Fit width (F)" @click="zoomTo(1)">
+      <button class="pill-btn" :data-tip="`Fit width${keyHint('pdfFit')}`" @click="zoomTo(1)">
         <i class="ph ph-arrows-out-line-horizontal" />
       </button>
       <button class="pill-btn" data-tip="Fullscreen" @click="toggleFullscreen">

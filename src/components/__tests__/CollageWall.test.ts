@@ -23,6 +23,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve({ f
 
 import CollageWall from "../CollageWall.vue";
 import { emptyDoc } from "../../composables/collageFile";
+import { settings, loadSettings } from "../../composables/settings";
 import type { CollageDoc } from "../../types";
 
 const VP = { w: 1000, h: 800 };
@@ -355,6 +356,28 @@ describe("CollageWall", () => {
     (w.vm as unknown as { handleAction: (a: { type: string }) => boolean }).handleAction({ type: "deselect" });
     await w.vm.$nextTick();
     expect(w.emitted("selected")?.slice(-1)[0]).toEqual([null]);
+    w.unmount();
+  });
+});
+
+describe("CollageWall tooltips", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+    document.body.innerHTML = "";
+    Element.prototype.scrollIntoView = vi.fn();
+    metaMock.mockReset().mockResolvedValue({ w: 3000, h: 1500, thumb: "data:," });
+  });
+
+  it("tooltips show the current key and drop it when unset", async () => {
+    settings.keybinds.collageSave = null;
+    settings.keybinds.collageFitAll = "j";
+    const w = mountWall();
+    await flushPromises();
+    const tips = w.findAll(".pill-btn").map((b) => b.attributes("data-tip"));
+    expect(tips).toContain("Save collage");
+    expect(tips).toContain("Fit all (J)");
+    expect(tips).toContain("Save collage as (Ctrl+Shift+S)");
     w.unmount();
   });
 });

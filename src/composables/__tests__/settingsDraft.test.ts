@@ -1,13 +1,25 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { nextTick } from "vue";
 import { settings, loadSettings } from "../settings";
-import { draft, dirty, openDraft, applyDraft, revertDraft } from "../settingsDraft";
+import { draft, dirty, openDraft, applyDraft, revertDraft, resetKeybindsDraft } from "../settingsDraft";
+import { defaultKeybinds } from "../keybinds";
 
 describe("settingsDraft", () => {
   beforeEach(() => {
     localStorage.clear();
     loadSettings();
     openDraft();
+  });
+
+  it("reset keybinds puts only the keybinds back to defaults, and is dirty until applied", () => {
+    settings.keybinds.mute = "j";
+    settings.video.skipStep = 10;
+    openDraft();
+    resetKeybindsDraft();
+    expect(draft.keybinds).toEqual(defaultKeybinds());
+    expect(draft.video.skipStep).toBe(10);
+    expect(dirty.value).toBe(true);
+    expect(settings.keybinds.mute).toBe("j");
   });
 
   it("opens as a copy of the store and is clean", () => {

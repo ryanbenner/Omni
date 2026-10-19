@@ -8,26 +8,29 @@ describe("UnsavedSettingsDialog", () => {
     document.body.innerHTML = "";
   });
 
-  it("shows the copy, focuses Apply, and emits apply or discard from the buttons", async () => {
+  it("offers Revert, Continue editing and Apply, and no X", async () => {
     const w = mount(UnsavedSettingsDialog, { attachTo: document.body });
     expect(w.find(".dialog-title").text()).toBe("Unsaved changes");
     expect(w.find(".dialog-body").text()).toBe("Your changes will be lost unless you apply them.");
-    expect(w.findAll(".dialog-actions button").map((b) => b.text())).toEqual(["Don't Save", "Apply"]);
+    expect(w.findAll(".dialog-actions button").map((b) => b.text())).toEqual(["Revert", "Continue editing", "Apply"]);
     expect(document.activeElement).toBe(w.find(".btn-apply").element);
-    await w.find(".btn-revert").trigger("click");
+    expect(w.find(".dialog-x").exists()).toBe(false);
+    const [revert, keep] = w.findAll(".dialog-actions button");
+    await revert.trigger("click");
     expect(w.emitted("discard")).toHaveLength(1);
+    await keep.trigger("click");
+    expect(w.emitted("stay")).toHaveLength(1);
     await w.find(".btn-apply").trigger("click");
     expect(w.emitted("apply")).toHaveLength(1);
     w.unmount();
   });
 
-  it("the X, Escape and a backdrop press all mean stay; a press inside the box does not", async () => {
+  it("Escape and a backdrop press mean stay; a press inside the box does not", async () => {
     const w = mount(UnsavedSettingsDialog, { attachTo: document.body });
-    await w.find(".dialog-x").trigger("click");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await w.find(".dialog-backdrop").trigger("pointerdown");
     await w.find(".dialog").trigger("pointerdown");
-    expect(w.emitted("stay")).toHaveLength(3);
+    expect(w.emitted("stay")).toHaveLength(2);
     w.unmount();
   });
 

@@ -1,143 +1,91 @@
+import type { ActionId } from "./keybinds";
+import { ACTIONS, SCOPE_SCREENS, comboFromEvent, formatCombo } from "./keybinds";
 import type { AppAction, StageKind, ViewerAction } from "../types";
 import { settings } from "./settings";
 
 export type Command =
   | { target: "app"; action: AppAction }
-  | { target: "viewer"; action: ViewerAction; fallback?: AppAction };
+  | { target: "viewer"; action: ViewerAction };
 
-type KeyInput = { key: string; shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean };
+export type KeyInput = {
+  key: string;
+  shiftKey: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
+};
 
-export function resolveKey(
-  e: KeyInput,
-  kind: StageKind | null,
-): Command | null {
+const VIEWER_ACTIONS: Partial<Record<ActionId, ViewerAction>> = {
+  stepBack: { type: "stepStart", direction: -1 },
+  stepForward: { type: "stepStart", direction: 1 },
+  playPause: { type: "playPause" },
+  mute: { type: "toggleMute" },
+  fullscreen: { type: "toggleFullscreen" },
+  trimIn: { type: "setIn" },
+  trimOut: { type: "setOut" },
+  exitTrim: { type: "exitTrim" },
+  imageFit: { type: "fit" },
+  pdfFit: { type: "fit" },
+  imageResetZoom: { type: "resetZoom" },
+  pdfResetZoom: { type: "resetZoom" },
+  collageResetZoom: { type: "resetZoom" },
+  imageRotate: { type: "rotate" },
+  collageRotate: { type: "rotate" },
+  enterCollage: { type: "enterCollage" },
+  pdfPrevPage: { type: "pageStep", pages: -1 },
+  pdfNextPage: { type: "pageStep", pages: 1 },
+  pdfFirstPage: { type: "pageJump", to: "first" },
+  pdfLastPage: { type: "pageJump", to: "last" },
+  collageSave: { type: "save" },
+  collageSaveAs: { type: "saveAs" },
+  collageLock: { type: "toggleLock" },
+  collageRemove: { type: "removeSelected" },
+  collageDeselect: { type: "deselect" },
+  collageFitAll: { type: "fitAll" },
+  collageExport: { type: "exportArea" },
+  collageMemory: { type: "toggleMemory" },
+  collageExit: { type: "exitCollage" },
+};
+
+function findAction(combo: string, kind: StageKind, only?: readonly ActionId[]) {
+  return ACTIONS.find(
+    (a) =>
+      (!only || only.includes(a.id)) &&
+      SCOPE_SCREENS[a.scope].includes(kind) &&
+      settings.keybinds[a.id] === combo,
+  )?.id;
+}
+
+function seek(id: ActionId, doubled: boolean): Command {
+  const seconds = settings.video.skipStep * (doubled ? 2 : 1);
+  return {
+    target: "viewer",
+    action: { type: "seek", seconds: id === "seekBack" ? -seconds : seconds },
+  };
+}
+
+export function resolveKey(e: KeyInput, kind: StageKind | null): Command | null {
   if (kind === null) return null;
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const combo = comboFromEvent(e);
+  if (combo === null) return null;
 
-  if (kind === "collage") {
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (ctrl && key === "s") {
-      return { target: "viewer", action: { type: e.shiftKey ? "saveAs" : "save" } };
-    }
-    if (ctrl) return null;
-    switch (key) {
-      case "l":
-        return { target: "viewer", action: { type: "toggleLock" } };
-      case "r":
-        return { target: "viewer", action: { type: "rotate" } };
-      case "Delete":
-      case "Backspace":
-        return { target: "viewer", action: { type: "removeSelected" } };
-      case "Escape":
-        return { target: "viewer", action: { type: "deselect" } };
-      case "f":
-        return { target: "viewer", action: { type: "fitAll" } };
-      case "0":
-        return { target: "viewer", action: { type: "resetZoom" } };
-      case "e":
-        return { target: "viewer", action: { type: "exportArea" } };
-      case "m":
-        return { target: "viewer", action: { type: "toggleMemory" } };
-      case "c":
-        return { target: "viewer", action: { type: "exitCollage" } };
-    }
-    return null;
+  const id = findAction(combo, kind);
+  if (id === "seekBack" || id === "seekForward") return seek(id, false);
+  if (id === "prevFile" || id === "nextFile") return { target: "app", action: { type: id } };
+  if (id) {
+    const action = VIEWER_ACTIONS[id];
+    return action ? { target: "viewer", action } : null;
   }
 
-  if (kind === "pdf") {
-    switch (key) {
-      case "ArrowLeft":
-        return { target: "app", action: { type: "prevFile" } };
-      case "ArrowRight":
-        return { target: "app", action: { type: "nextFile" } };
-      case "PageUp":
-        return { target: "viewer", action: { type: "pageStep", pages: -1 } };
-      case "PageDown":
-        return { target: "viewer", action: { type: "pageStep", pages: 1 } };
-      case "Home":
-        return { target: "viewer", action: { type: "pageJump", to: "first" } };
-      case "End":
-        return { target: "viewer", action: { type: "pageJump", to: "last" } };
-      case "f":
-        return { target: "viewer", action: { type: "fit" } };
-      case "0":
-        return { target: "viewer", action: { type: "resetZoom" } };
-    }
-    return null;
-  }
-
-  // image and video
-  if (key === "PageUp") return { target: "app", action: { type: "prevFile" } };
-  if (key === "PageDown") return { target: "app", action: { type: "nextFile" } };
-
-  if (kind === "image") {
-    switch (key) {
-      case "ArrowLeft":
-        return { target: "app", action: { type: "prevFile" } };
-      case "ArrowRight":
-        return { target: "app", action: { type: "nextFile" } };
-      case "f":
-        return { target: "viewer", action: { type: "fit" } };
-      case "0":
-        return { target: "viewer", action: { type: "resetZoom" } };
-      case "r":
-        return { target: "viewer", action: { type: "rotate" } };
-      case "c":
-        return { target: "viewer", action: { type: "enterCollage" } };
-    }
-    return null;
-  }
-
-  // video
-  const step = settings.video.skipStep * (e.shiftKey ? 2 : 1);
-  switch (key) {
-    case "ArrowLeft":
-      return {
-        target: "viewer",
-        action: { type: "seek", seconds: -step },
-        fallback: { type: "prevFile" },
-      };
-    case "ArrowRight":
-      return {
-        target: "viewer",
-        action: { type: "seek", seconds: step },
-        fallback: { type: "nextFile" },
-      };
-    case " ":
-      return { target: "viewer", action: { type: "playPause" } };
-    case ",":
-      return { target: "viewer", action: { type: "frameStep", frames: -1 } };
-    case ".":
-      return { target: "viewer", action: { type: "frameStep", frames: 1 } };
-    case "<":
-      return { target: "viewer", action: { type: "shuttleStart", direction: -1 } };
-    case ">":
-      return { target: "viewer", action: { type: "shuttleStart", direction: 1 } };
-    case "m":
-      return { target: "viewer", action: { type: "toggleMute" } };
-    case "f":
-      return { target: "viewer", action: { type: "toggleFullscreen" } };
-    case "i":
-      return { target: "viewer", action: { type: "setIn" } };
-    case "o":
-      return { target: "viewer", action: { type: "setOut" } };
-    case "Escape":
-      return { target: "viewer", action: { type: "exitTrim" } };
+  // shift doubles the skip, so strip it and match the seek binds only
+  if (kind === "video" && combo.includes("shift+")) {
+    const seekId = findAction(combo.replace("shift+", ""), kind, ["seekBack", "seekForward"]);
+    if (seekId) return seek(seekId, true);
   }
   return null;
 }
 
-// keyup matters only for hold-to-shuttle: releasing < or > ends the shuttle
-export function resolveKeyUp(
-  e: KeyInput,
-  kind: StageKind | null,
-): Command | null {
-  if (kind !== "video") return null;
-  switch (e.key) {
-    case "<":
-      return { target: "viewer", action: { type: "shuttleStop", direction: -1 } };
-    case ">":
-      return { target: "viewer", action: { type: "shuttleStop", direction: 1 } };
-  }
-  return null;
+export function keyHint(id: ActionId): string {
+  const combo = settings.keybinds[id];
+  return combo ? ` (${formatCombo(combo)})` : "";
 }
