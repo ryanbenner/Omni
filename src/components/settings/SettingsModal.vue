@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { onEscape } from "../../composables/dialogStack";
-import { dirty, openDraft, applyDraft, revertDraft } from "../../composables/settingsDraft";
+import { dirty, openDraft, applyDraft, revertDraft, resetKeybindsDraft } from "../../composables/settingsDraft";
+import { KEYBIND_GROUPS, type Scope } from "../../composables/keybinds";
+import { keybindGroup, keybindJump, keybindPromptOpen } from "./settingsState";
 import { SECTIONS, selectedSection, type SectionId } from "./sections";
 import UnsavedSettingsDialog from "./UnsavedSettingsDialog.vue";
 
@@ -18,8 +20,15 @@ function select(id: SectionId) {
   selectedSection.value = id;
 }
 
+function jumpTo(scope: Scope) {
+  select("keybinds");
+  keybindJump.value = scope;
+}
+
 // an exit parked behind the prompt: run after apply or discard, cancel on stay
 const pending = ref<{ run: () => void; cancel?: () => void } | null>(null);
+// either prompt makes the nav and page unreachable by Tab
+const blocked = computed(() => !!pending.value || keybindPromptOpen.value);
 
 function guard(run: () => void, cancel?: () => void) {
   if (!dirty.value) {
@@ -70,20 +79,31 @@ defineExpose({ requestClose });
 <template>
   <!-- the native menu's reload entry would drop an unsaved wall underneath -->
   <div class="settings" role="dialog" aria-label="Settings" @contextmenu.prevent>
-    <nav ref="nav" class="settings-nav" :inert="pending ? true : undefined">
+    <nav ref="nav" class="settings-nav" :inert="blocked ? true : undefined">
       <div class="nav-caption">Settings</div>
-      <button
-        v-for="s in SECTIONS"
-        :key="s.id"
-        class="nav-item"
-        :class="{ active: s.id === selectedSection }"
-        @click="guard(() => select(s.id))"
-      >
-        <i class="ph" :class="s.icon" />
-        <span>{{ s.label }}</span>
-      </button>
+      <template v-for="s in SECTIONS" :key="s.id">
+        <button
+          class="nav-item"
+          :class="{ active: s.id === selectedSection }"
+          @click="guard(() => select(s.id))"
+        >
+          <i class="ph" :class="s.icon" />
+          <span>{{ s.label }}</span>
+        </button>
+        <template v-if="s.id === 'keybinds'">
+          <button
+            v-for="g in KEYBIND_GROUPS"
+            :key="g.scope"
+            class="nav-item nav-sub"
+            :class="{ active: selectedSection === 'keybinds' && keybindGroup === g.scope }"
+            @click="guard(() => jumpTo(g.scope))"
+          >
+            <span>{{ g.label }}</span>
+          </button>
+        </template>
+      </template>
     </nav>
-    <div class="settings-page" :inert="pending ? true : undefined">
+    <div class="settings-page" :inert="blocked ? true : undefined">
       <div class="page-header">
         <span class="page-title">{{ current.label }}</span>
         <button class="settings-close" title="Close" @click="guard(() => emit('close'))">
@@ -92,6 +112,9 @@ defineExpose({ requestClose });
       </div>
       <div class="page-body">
         <component :is="current.page" />
+      </div>
+      <div v-if="current.id === 'keybinds'" class="page-footer-left">
+        <button class="btn-revert" @click="resetKeybindsDraft">Revert to defaults</button>
       </div>
       <div v-if="dirty" class="page-footer">
         <button class="btn-revert" @click="revertDraft">Revert</button>
@@ -168,6 +191,11 @@ defineExpose({ requestClose });
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+.nav-sub {
+  height: 28px;
+  padding-left: 32px;
+  font-size: 12px;
+}
 .settings-page {
   position: relative;
   flex: 1;
@@ -227,6 +255,11 @@ defineExpose({ requestClose });
   bottom: 16px;
   display: flex;
   gap: 8px;
+}
+.page-footer-left {
+  position: absolute;
+  left: 28px;
+  bottom: 16px;
 }
 .page-footer .btn-apply,
 .page-footer .btn-revert {

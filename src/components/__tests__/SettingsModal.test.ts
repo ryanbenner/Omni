@@ -4,7 +4,9 @@ import { nextTick } from "vue";
 import SettingsModal from "../settings/SettingsModal.vue";
 import { selectedSection } from "../settings/sections";
 import { settings, loadSettings } from "../../composables/settings";
-import { openDraft } from "../../composables/settingsDraft";
+import { openDraft, draft } from "../../composables/settingsDraft";
+import { defaultKeybinds } from "../../composables/keybinds";
+import { keybindGroup, keybindJump, keybindPromptOpen } from "../settings/settingsState";
 
 describe("SettingsModal", () => {
   beforeEach(() => {
@@ -17,7 +19,7 @@ describe("SettingsModal", () => {
 
   it("lists the seven sections with their icons", () => {
     const w = mount(SettingsModal);
-    const items = w.findAll(".nav-item");
+    const items = w.findAll(".nav-item:not(.nav-sub)");
     expect(items.map((i) => i.text())).toEqual([
       "General",
       "Video Player",
@@ -239,6 +241,75 @@ describe("SettingsModal", () => {
     await w.find(".dialog-x").trigger("click");
     expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
     w.unmount();
+  });
+
+  it("keybinds has five nested group items right after it", () => {
+    const w = mount(SettingsModal);
+    const texts = w.findAll(".nav-item").map((i) => i.text());
+    expect(texts.slice(-6)).toEqual([
+      "Keybinds",
+      "General Keybinds",
+      "Video Keybinds",
+      "Image Keybinds",
+      "PDF Keybinds",
+      "Collage Keybinds",
+    ]);
+    expect(w.findAll(".nav-item")[6].find("i").classes()).toContain("ph-keyboard");
+    expect(w.findAll(".nav-sub").length).toBe(5);
+  });
+
+  it("nested items are only highlighted on the keybinds page", async () => {
+    keybindGroup.value = "general";
+    const w = mount(SettingsModal);
+    expect(w.findAll(".nav-sub.active").length).toBe(0);
+    await w.findAll(".nav-item")[6].trigger("click");
+    const active = w.findAll(".nav-sub.active");
+    expect(active.map((a) => a.text())).toEqual(["General Keybinds"]);
+  });
+
+  it("a nested item from another section goes to keybinds and jumps", async () => {
+    keybindJump.value = null;
+    const w = mount(SettingsModal);
+    const pdf = w.findAll(".nav-sub").find((n) => n.text() === "PDF Keybinds")!;
+    await pdf.trigger("click");
+    expect(w.find(".page-title").text()).toBe("Keybinds");
+    expect(keybindGroup.value).toBe("pdf");
+    expect(keybindJump.value).toBeNull();
+  });
+
+  it("a nested item asks first when the current page has unsaved edits", async () => {
+    const w = mount(SettingsModal, { attachTo: document.body });
+    await w.findAll("[role=switch]")[2].trigger("click");
+    const video = w.findAll(".nav-sub").find((n) => n.text() === "Video Keybinds")!;
+    await video.trigger("click");
+    expect(w.find(".dialog").exists()).toBe(true);
+    expect(selectedSection.value).toBe("general");
+    w.unmount();
+  });
+
+  it("revert to defaults shows only on keybinds and resets just the keybinds", async () => {
+    const w = mount(SettingsModal);
+    expect(w.find(".btn-revert").exists()).toBe(false);
+    await w.findAll(".nav-item")[6].trigger("click");
+    draft.keybinds.mute = "j";
+    await nextTick();
+    expect(w.find(".page-footer .btn-revert").exists()).toBe(true);
+    await w.find(".page-footer-left .btn-revert").trigger("click");
+    expect(draft.keybinds).toEqual(defaultKeybinds());
+    expect(w.find(".page-footer").exists()).toBe(false);
+  });
+
+  it("the nav and page go inert while a keybind overwrite prompt is up", async () => {
+    const w = mount(SettingsModal);
+    expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
+    keybindPromptOpen.value = true;
+    await nextTick();
+    expect(w.find(".settings-nav").attributes("inert")).toBeDefined();
+    expect(w.find(".settings-page").attributes("inert")).toBeDefined();
+    keybindPromptOpen.value = false;
+    await nextTick();
+    expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
+    expect(w.find(".settings-page").attributes("inert")).toBeUndefined();
   });
 
   it("unmounting mid-prompt settles a waiting requestClose as false", async () => {

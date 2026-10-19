@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { onEscape } from "../../composables/dialogStack";
 import { draft } from "../../composables/settingsDraft";
 import {
@@ -11,8 +11,10 @@ import {
   findConflict,
   formatCombo,
   type ActionId,
+  type Scope,
 } from "../../composables/keybinds";
-import { keybindPromptOpen } from "./settingsState";
+import { mostVisible } from "../../composables/scrollSpy";
+import { keybindGroup, keybindJump, keybindPromptOpen } from "./settingsState";
 import KeybindConflictDialog from "./KeybindConflictDialog.vue";
 
 const groups = KEYBIND_GROUPS.map((g) => ({ ...g, actions: ACTIONS.filter((a) => a.scope === g.scope) }));
@@ -76,7 +78,46 @@ function chipText(id: ActionId) {
   return bind === null ? "Not set" : formatCombo(bind);
 }
 
+let scroller: HTMLElement | null = null;
+
+function sections() {
+  return [...(root.value?.querySelectorAll<HTMLElement>("section[data-scope]") ?? [])];
+}
+
+function onScroll() {
+  if (!scroller) return;
+  const view = scroller.getBoundingClientRect();
+  const items = sections().map((el) => {
+    const r = el.getBoundingClientRect();
+    return { id: el.dataset.scope as Scope, top: r.top, bottom: r.bottom };
+  });
+  if (items.length) keybindGroup.value = mostVisible(items, view.top, view.bottom);
+}
+
+function jump() {
+  const scope = keybindJump.value;
+  // before mount the watcher fires too early; onMounted picks the jump up
+  if (!scope || !scroller) return;
+  const el = sections().find((s) => s.dataset.scope === scope);
+  if (el && scroller) {
+    // the body's 28px top padding stays above the heading
+    scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 28;
+  }
+  keybindGroup.value = scope;
+  keybindJump.value = null;
+}
+
+watch(keybindJump, jump);
+
+onMounted(() => {
+  scroller = root.value?.closest<HTMLElement>(".page-body") ?? null;
+  scroller?.addEventListener("scroll", onScroll, { passive: true });
+  // a jump made before mount (nav click from another section)
+  jump();
+});
+
 onUnmounted(() => {
+  scroller?.removeEventListener("scroll", onScroll);
   stop();
   keybindPromptOpen.value = false;
 });
