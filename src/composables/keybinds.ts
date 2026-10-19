@@ -152,6 +152,14 @@ export function actionHint(id: ActionId, skipStep: number): string | undefined {
   return undefined;
 }
 
+// a combo comboFromEvent could have produced: ordered modifiers, then one key part
+function isCanonical(combo: string): boolean {
+  const { key } = splitCombo(combo);
+  if (key === "" || MODIFIER_KEYS.has(key)) return false;
+  if (key.length === 1) return key === key.toLowerCase();
+  return !key.includes("+");
+}
+
 export function validateKeybinds(saved: unknown): Keybinds {
   const defaults = defaultKeybinds();
   if (typeof saved !== "object" || saved === null) return defaults;
@@ -161,7 +169,7 @@ export function validateKeybinds(saved: unknown): Keybinds {
     const v = src[a.id];
     const ok =
       v === null ||
-      (typeof v === "string" && v !== "" && (v === a.default || bindableCombo(a.id, v) === v));
+      (typeof v === "string" && isCanonical(v) && (v === a.default || bindableCombo(a.id, v) === v));
     const candidate = ok ? (v as string | null) : a.default;
     if (candidate === null || !findConflict(out, a.id, candidate)) out[a.id] = candidate;
     else if (!findConflict(out, a.id, a.default)) out[a.id] = a.default;

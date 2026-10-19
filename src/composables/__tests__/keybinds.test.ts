@@ -86,4 +86,24 @@ describe("keybinds", () => {
     expect(w.fullscreen).toBeNull();
     for (const a of ACTIONS) if (v[a.id]) expect(findConflict(v, a.id, v[a.id]!)).toBeNull();
   });
+  it("validation rejects non-canonical and junk combos", () => {
+    const v = validateKeybinds({
+      mute: "Ctrl+S",
+      fullscreen: "shift+ctrl+a",
+      trimIn: "Q",
+      trimOut: "Shift",
+      playPause: "ctrl+",
+      stepBack: "",
+      stepForward: "ctrl+ctrl+a",
+    });
+    const d = defaultKeybinds();
+    for (const id of ["mute", "fullscreen", "trimIn", "trimOut", "playPause", "stepBack", "stepForward"] as const) {
+      expect(v[id]).toBe(d[id]);
+    }
+  });
+  it("validation still accepts valid plus and modified keys", () => {
+    const v = validateKeybinds({ mute: "shift++", trimIn: "ctrl+shift+q" });
+    expect(v.mute).toBe("shift++");
+    expect(v.trimIn).toBe("ctrl+shift+q");
+  });
 });
