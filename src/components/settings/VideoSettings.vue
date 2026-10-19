@@ -23,7 +23,7 @@ const volumePct = computed({
   <SettingRow label="Default playback speed">
     <SettingSelect v-model="draft.video.defaultSpeed" :options="speedOptions" />
   </SettingRow>
-  <SettingRow label="Skip step" description="The skip buttons and arrow keys. Shift doubles it.">
+  <SettingRow label="Skip step" description="The skip buttons and seek keys. Shift doubles it.">
     <SettingSelect v-model="draft.video.skipStep" :options="skipOptions" />
   </SettingRow>
   <SettingRow label="Start paused" description="Videos open on their first frame instead of playing.">

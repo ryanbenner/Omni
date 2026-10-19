@@ -15,7 +15,7 @@ describe("SettingsModal", () => {
     document.body.innerHTML = "";
   });
 
-  it("lists the six sections with their icons", () => {
+  it("lists the seven sections with their icons", () => {
     const w = mount(SettingsModal);
     const items = w.findAll(".nav-item");
     expect(items.map((i) => i.text())).toEqual([
@@ -25,6 +25,7 @@ describe("SettingsModal", () => {
       "Collages",
       "PDF Viewer",
       "Markdown Editor",
+      "Keybinds",
     ]);
     expect(items[0].find("i").classes()).toContain("ph-sliders-horizontal");
     expect(items[1].find("i").classes()).toContain("ph-film-strip");
@@ -32,6 +33,7 @@ describe("SettingsModal", () => {
     expect(items[3].find("i").classes()).toContain("ph-squares-four");
     expect(items[4].find("i").classes()).toContain("ph-file-pdf");
     expect(items[5].find("i").classes()).toContain("ph-markdown-logo");
+    expect(items[6].find("i").classes()).toContain("ph-keyboard");
   });
 
   it("clicking a section swaps the page and records the selection", async () => {
