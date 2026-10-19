@@ -498,3 +498,92 @@ describe("VideoPlayer error screen", () => {
     expect(w.find(".video-error").text()).not.toContain("HEVC");
   });
 });
+
+describe("VideoPlayer step keys", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    loadSettings();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  type Action = { type: "stepStart" | "stepStop"; direction: 1 | -1 } | { type: "seek"; seconds: number } | { type: "setIn" };
+  function act(w: ReturnType<typeof mount>, a: Action) {
+    return (w.vm as unknown as { handleAction: (a: Action) => boolean }).handleAction(a);
+  }
+  function setup(paused: boolean, t: number) {
+    const p = mountPlayer(paused);
+    Object.defineProperty(p.el, "duration", { value: 100, configurable: true });
+    Object.defineProperty(p.el, "currentTime", { value: t, writable: true, configurable: true });
+    return p;
+  }
+
+  it("a tapped step pauses and moves one frame without slow motion", async () => {
+    const { w, el, pause } = setup(false, 10);
+    const chips: string[] = [];
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(100);
+    await w.vm.$nextTick();
+    chips.push(w.find(".speed-chip").text());
+    act(w, { type: "stepStop", direction: 1 });
+    await w.vm.$nextTick();
+    chips.push(w.find(".speed-chip").text());
+    expect(pause).toHaveBeenCalled();
+    expect(el.currentTime).toBeCloseTo(10 + 1 / 60);
+    expect(el.playbackRate).toBe(1);
+    expect(chips).toEqual(["1x", "1x"]);
+  });
+
+  it("holding step forward plays at 0.1x after 250ms and is paused on release", async () => {
+    const { w, el, play, pause } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(249);
+    await w.vm.$nextTick();
+    expect(w.find(".speed-chip").text()).not.toBe("0.1x");
+    vi.advanceTimersByTime(2);
+    await w.vm.$nextTick();
+    expect(w.find(".speed-chip").text()).toBe("0.1x");
+    expect(play).toHaveBeenCalled();
+    expect(el.playbackRate).toBe(0.1);
+    pause.mockClear();
+    act(w, { type: "stepStop", direction: 1 });
+    await w.vm.$nextTick();
+    expect(pause).toHaveBeenCalled();
+    expect(el.playbackRate).toBe(1);
+    expect(w.find(".speed-chip").text()).toBe("1x");
+  });
+
+  it("holding step back from paused shows -0.1x and stays paused on release", async () => {
+    const { w, play, pause } = setup(true, 10);
+    act(w, { type: "stepStart", direction: -1 });
+    vi.advanceTimersByTime(300);
+    await w.vm.$nextTick();
+    expect(w.find(".speed-chip").text()).toBe("-0.1x");
+    act(w, { type: "stepStop", direction: -1 });
+    await w.vm.$nextTick();
+    expect(w.find(".speed-chip").text()).toBe("1x");
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+  });
+
+  it("a repeated stepStart while held does not step again", () => {
+    const { w, el } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    act(w, { type: "stepStart", direction: 1 });
+    expect(el.currentTime).toBeCloseTo(10 + 1 / 60);
+  });
+
+  it("stepping stays inside the trim range", async () => {
+    const { w, el } = setup(true, 2);
+    await w.find("button[title='Trim clip']").trigger("click");
+    act(w, { type: "setIn" });
+    act(w, { type: "stepStart", direction: -1 });
+    act(w, { type: "stepStop", direction: -1 });
+    expect(el.currentTime).toBe(2);
+  });
+
+  it("seek at the edge of a paused video is handled, not passed on", () => {
+    const { w } = setup(true, 0);
+    expect(act(w, { type: "seek", seconds: -5 })).toBe(true);
+  });
+});

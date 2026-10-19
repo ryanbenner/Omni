@@ -257,14 +257,12 @@ const failureHint = ref("");
 const speed = ref(settings.video.defaultSpeed);
 
 const FRAME = 1 / 60;
-const EDGE = 0.05;
 const SHUTTLE_RATE = 0.1;
 
-// hold-to-shuttle: > plays at 10% speed, < steps backwards at 10% speed
-// (video elements cannot play in reverse, so rev is a seek loop)
+// holding a step key past STEP_HOLD_MS goes slow motion: forward plays at 10% speed,
+// backward steps at 10% speed (video elements cannot play in reverse, so rev is a seek loop)
 const shuttle = ref<"fwd" | "rev" | null>(null);
 let priorRate = settings.video.defaultSpeed;
-let priorPaused = false;
 let revRaf = 0;
 let revLastTs = 0;
 
@@ -290,7 +288,6 @@ function startShuttle(direction: 1 | -1) {
   if (shuttle.value === mode) return;
   if (shuttle.value === null) {
     priorRate = el.playbackRate;
-    priorPaused = el.paused;
   }
   stopRevLoop();
   shuttle.value = mode;
@@ -312,8 +309,35 @@ function stopShuttle(direction: 1 | -1) {
   stopRevLoop();
   shuttle.value = null;
   el.playbackRate = priorRate;
-  if (priorPaused || (trim.active.value && el.currentTime >= trim.outSec.value - 0.01)) el.pause();
-  else el.play().catch(() => {});
+  el.pause();
+}
+
+const STEP_HOLD_MS = 250;
+const stepHeld = { 1: false, "-1": false };
+const stepTimers: Record<string, number> = {};
+
+function stepStart(direction: 1 | -1) {
+  const el = video.value;
+  if (!el || stepHeld[direction]) return;
+  stepHeld[direction] = true;
+  el.pause();
+  seekBy(direction * FRAME);
+  clampToTrim(el);
+  stepTimers[direction] = window.setTimeout(() => startShuttle(direction), STEP_HOLD_MS);
+}
+
+function stepStop(direction: 1 | -1) {
+  if (!stepHeld[direction]) return;
+  stepHeld[direction] = false;
+  clearTimeout(stepTimers[direction]);
+  stopShuttle(direction);
+  video.value?.pause();
+}
+
+function clampToTrim(el: HTMLVideoElement) {
+  if (trim.active.value) {
+    el.currentTime = Math.min(trim.outSec.value, Math.max(trim.inSec.value, el.currentTime));
+  }
 }
 
 function clearShuttle() {
@@ -596,33 +620,15 @@ function handleAction(action: ViewerAction): boolean {
       togglePlay();
       return true;
     case "seek": {
-      // paused at the relevant edge means the user is done: let the
-      // app fall back to prev/next file per spec (never while trimming,
-      // so arrows can't bounce the app to a different file mid-trim)
-      if (!trim.active.value && el.paused && action.seconds < 0 && el.currentTime <= EDGE)
-        return false;
-      if (
-        !trim.active.value &&
-        el.paused &&
-        action.seconds > 0 &&
-        el.currentTime >= el.duration - EDGE
-      )
-        return false;
       seekBy(action.seconds);
-      if (trim.active.value) {
-        el.currentTime = Math.min(trim.outSec.value, Math.max(trim.inSec.value, el.currentTime));
-      }
+      clampToTrim(el);
       return true;
     }
-    case "frameStep":
-      el.pause();
-      seekBy(action.frames * FRAME);
+    case "stepStart":
+      stepStart(action.direction);
       return true;
-    case "shuttleStart":
-      startShuttle(action.direction);
-      return true;
-    case "shuttleStop":
-      stopShuttle(action.direction);
+    case "stepStop":
+      stepStop(action.direction);
       return true;
     case "toggleMute":
       toggleMute();
