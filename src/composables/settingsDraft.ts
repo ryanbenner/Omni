@@ -1,5 +1,6 @@
 import { computed, reactive } from "vue";
 import { settings, type Settings } from "./settings";
+import { defaultKeybinds } from "./keybinds";
 
 // a plain copy; the store is json-shaped data, and cloning a reactive proxy
 // through structuredClone throws
@@ -26,4 +27,8 @@ export function applyDraft() {
   for (const key of Object.keys(settings) as (keyof Settings)[]) {
     Object.assign(settings[key], copy[key]);
   }
+}
+
+export function resetKeybindsDraft() {
+  Object.assign(draft.keybinds, defaultKeybinds());
 }

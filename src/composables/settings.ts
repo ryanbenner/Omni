@@ -1,5 +1,6 @@
 import { reactive, watch, type WatchStopHandle } from "vue";
 import { SPEEDS } from "./videoControls";
+import { defaultKeybinds, validateKeybinds, type Keybinds } from "./keybinds";
 
 export type ZoomStep = "fine" | "normal" | "coarse";
 export const ZOOM_STEP_NAMES: readonly ZoomStep[] = ["fine", "normal", "coarse"];
@@ -38,6 +39,7 @@ export interface Settings {
   };
   image: { zoomStep: ZoomStep };
   collage: { memoryCapGb: number; jpgQuality: number };
+  keybinds: Keybinds;
 }
 
 // every default is the value the code hardcoded before settings existed,
@@ -68,6 +70,7 @@ export const DEFAULTS: Settings = {
   },
   image: { zoomStep: "normal" },
   collage: { memoryCapGb: 6, jpgQuality: 92 },
+  keybinds: defaultKeybinds(),
 };
 
 // integer fields shown as number inputs; the loader and SettingNumber both read this
@@ -133,6 +136,7 @@ function apply(saved: unknown) {
   }
   if (inRange(c.memoryCapGb, "collage.memoryCapGb")) settings.collage.memoryCapGb = c.memoryCapGb;
   if (inRange(c.jpgQuality, "collage.jpgQuality")) settings.collage.jpgQuality = c.jpgQuality;
+  Object.assign(settings.keybinds, validateKeybinds(s.keybinds));
 }
 
 function save() {
