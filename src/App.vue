@@ -151,8 +151,7 @@ function onCommand(cmd: Command) {
     return;
   }
   const stage = collageOpen.value ? wall.value : viewer.value;
-  const handled = stage?.handleAction(cmd.action) ?? false;
-  if (!handled && cmd.fallback) applyApp(cmd.fallback);
+  stage?.handleAction(cmd.action);
 }
 
 useKeyboard(

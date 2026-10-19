@@ -18,9 +18,8 @@ export interface ScanResult {
 export type ViewerAction =
   | { type: "playPause" }
   | { type: "seek"; seconds: number }
-  | { type: "frameStep"; frames: number }
-  | { type: "shuttleStart"; direction: 1 | -1 }
-  | { type: "shuttleStop"; direction: 1 | -1 }
+  | { type: "stepStart"; direction: 1 | -1 }
+  | { type: "stepStop"; direction: 1 | -1 }
   | { type: "toggleMute" }
   | { type: "toggleFullscreen" }
   | { type: "rotate" }
