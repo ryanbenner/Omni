@@ -313,25 +313,43 @@ function stopShuttle(direction: 1 | -1) {
 }
 
 const STEP_HOLD_MS = 250;
-const stepHeld = { 1: false, "-1": false };
+// held step keys in press order: the most recent one owns the video
+let stepOrder: (1 | -1)[] = [];
 const stepTimers: Record<string, number> = {};
+const stepPassed: Record<string, boolean> = {};
 
 function stepStart(direction: 1 | -1) {
   const el = video.value;
-  if (!el || stepHeld[direction]) return;
-  stepHeld[direction] = true;
+  if (!el || stepOrder.includes(direction)) return;
+  const prev = stepOrder[stepOrder.length - 1];
+  if (prev) stopShuttle(prev);
+  stepOrder.push(direction);
+  stepPassed[direction] = false;
   el.pause();
   seekBy(direction * FRAME);
   clampToTrim(el);
-  stepTimers[direction] = window.setTimeout(() => startShuttle(direction), STEP_HOLD_MS);
+  stepTimers[direction] = window.setTimeout(() => {
+    stepPassed[direction] = true;
+    if (stepOrder[stepOrder.length - 1] === direction) startShuttle(direction);
+  }, STEP_HOLD_MS);
 }
 
 function stepStop(direction: 1 | -1) {
-  if (!stepHeld[direction]) return;
-  stepHeld[direction] = false;
+  if (!stepOrder.includes(direction)) return;
+  const wasOwner = stepOrder[stepOrder.length - 1] === direction;
+  stepOrder = stepOrder.filter((d) => d !== direction);
   clearTimeout(stepTimers[direction]);
+  if (!wasOwner) return;
   stopShuttle(direction);
   video.value?.pause();
+  // hand the video back to the key still held, past its threshold or not
+  const next = stepOrder[stepOrder.length - 1];
+  if (next && stepPassed[next]) startShuttle(next);
+}
+
+function clearSteps() {
+  stepOrder.forEach((d) => clearTimeout(stepTimers[d]));
+  stepOrder = [];
 }
 
 function clampToTrim(el: HTMLVideoElement) {
@@ -341,6 +359,7 @@ function clampToTrim(el: HTMLVideoElement) {
 }
 
 function clearShuttle() {
+  clearSteps();
   stopRevLoop();
   shuttle.value = null;
 }
@@ -487,6 +506,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   wrapObserver?.disconnect();
+  clearSteps();
   stopRevLoop();
   clearTimeout(holdTimer);
   clearTimeout(hideTimer);
@@ -613,6 +633,11 @@ function toggleFullscreen() {
 }
 
 function handleAction(action: ViewerAction): boolean {
+  // release must clear held state even when the video is unavailable
+  if (action.type === "stepStop") {
+    stepStop(action.direction);
+    return true;
+  }
   const el = video.value;
   if (!el || failed.value) return false;
   switch (action.type) {
@@ -626,9 +651,6 @@ function handleAction(action: ViewerAction): boolean {
     }
     case "stepStart":
       stepStart(action.direction);
-      return true;
-    case "stepStop":
-      stepStop(action.direction);
       return true;
     case "toggleMute":
       toggleMute();

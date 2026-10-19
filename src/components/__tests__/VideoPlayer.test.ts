@@ -582,6 +582,68 @@ describe("VideoPlayer step keys", () => {
     expect(el.currentTime).toBe(2);
   });
 
+  it("stepping forward at the out point stays at the out point", async () => {
+    const { w, el } = setup(true, 100);
+    await w.find("button[title='Trim clip']").trigger("click");
+    act(w, { type: "stepStart", direction: 1 });
+    act(w, { type: "stepStop", direction: 1 });
+    expect(el.currentTime).toBe(100);
+  });
+
+  async function chip(w: ReturnType<typeof mount>) {
+    await w.vm.$nextTick();
+    return w.find(".speed-chip").text();
+  }
+
+  it("tapping back during forward slow motion hands it back on release", async () => {
+    const { w, play } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(300);
+    expect(await chip(w)).toBe("0.1x");
+    play.mockClear();
+    act(w, { type: "stepStart", direction: -1 });
+    vi.advanceTimersByTime(100);
+    expect(await chip(w)).toBe("1x");
+    act(w, { type: "stepStop", direction: -1 });
+    expect(await chip(w)).toBe("0.1x");
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("back taking over slow motion returns it to forward on release", async () => {
+    const { w } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(300);
+    act(w, { type: "stepStart", direction: -1 });
+    vi.advanceTimersByTime(300);
+    expect(await chip(w)).toBe("-0.1x");
+    act(w, { type: "stepStop", direction: -1 });
+    expect(await chip(w)).toBe("0.1x");
+  });
+
+  it("releasing the older key leaves the owner's slow motion running", async () => {
+    const { w } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(300);
+    act(w, { type: "stepStart", direction: -1 });
+    vi.advanceTimersByTime(300);
+    act(w, { type: "stepStop", direction: 1 });
+    expect(await chip(w)).toBe("-0.1x");
+  });
+
+  it("releasing both keys leaves it paused at normal speed", async () => {
+    const { w, el, pause } = setup(false, 10);
+    act(w, { type: "stepStart", direction: 1 });
+    vi.advanceTimersByTime(300);
+    act(w, { type: "stepStart", direction: -1 });
+    vi.advanceTimersByTime(300);
+    act(w, { type: "stepStop", direction: -1 });
+    pause.mockClear();
+    act(w, { type: "stepStop", direction: 1 });
+    expect(await chip(w)).toBe("1x");
+    expect(pause).toHaveBeenCalled();
+    expect(el.playbackRate).toBe(1);
+  });
+
   it("seek at the edge of a paused video is handled, not passed on", () => {
     const { w } = setup(true, 0);
     expect(act(w, { type: "seek", seconds: -5 })).toBe(true);
