@@ -112,3 +112,21 @@ describe("ImageViewer delete", () => {
     expect(w.emitted("deleteFile")).toHaveLength(1);
   });
 });
+
+describe("ImageViewer tooltips", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("tooltips show the current key and drop it when unset", async () => {
+    settings.keybinds.imageFit = "j";
+    settings.keybinds.imageRotate = null;
+    const w = mount(ImageViewer, { props: { item } });
+    await w.vm.$nextTick();
+    const tips = w.findAll(".pill-btn").map((b) => b.attributes("data-tip"));
+    expect(tips).toContain("Fit to window (J)");
+    expect(tips).toContain("Rotate");
+    expect(tips).not.toContain("Rotate (R)");
+  });
+});

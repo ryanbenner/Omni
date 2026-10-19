@@ -649,3 +649,20 @@ describe("VideoPlayer step keys", () => {
     expect(act(w, { type: "seek", seconds: -5 })).toBe(true);
   });
 });
+
+describe("VideoPlayer tooltips", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    loadSettings();
+  });
+
+  it("tooltips show the current key and drop it when unset", async () => {
+    settings.keybinds.mute = "j";
+    settings.keybinds.fullscreen = null;
+    const { w } = mountPlayer(false);
+    await w.vm.$nextTick();
+    expect(w.find("button[title='Mute (J)']").exists()).toBe(true);
+    expect(w.find("button[title='Fullscreen']").exists()).toBe(true);
+    expect(w.find("button[title='Play / pause (Space)']").exists()).toBe(true);
+  });
+});

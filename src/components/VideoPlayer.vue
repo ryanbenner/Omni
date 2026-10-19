@@ -17,6 +17,7 @@ import {
 } from "../composables/useExport";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { keyHint } from "../composables/keymap";
 import { onEscape } from "../composables/dialogStack";
 import { usePersistentVolume } from "../composables/usePersistentVolume";
 
@@ -805,7 +806,7 @@ const progress = computed(() =>
             <span class="skip-num">{{ settings.video.skipStep }}</span>
           </span>
         </button>
-        <button class="play-btn" title="Play / pause (Space)" @click="togglePlay">
+        <button class="play-btn" :title="`Play / pause${keyHint('playPause')}`" @click="togglePlay">
           <i class="ph-fill" :class="playing ? 'ph-pause' : 'ph-play'" />
         </button>
         <button class="tbtn skip" :title="`Forward ${settings.video.skipStep} seconds`" @click="skip(1)">
@@ -815,7 +816,7 @@ const progress = computed(() =>
           </span>
         </button>
         <div class="cluster right">
-          <button class="tbtn" title="Mute (M)" @click="toggleMute">
+          <button class="tbtn" :title="`Mute${keyHint('mute')}`" @click="toggleMute">
             <i class="ph" :class="muted || volume === 0 ? 'ph-speaker-slash' : 'ph-speaker-high'" />
           </button>
           <input
@@ -835,7 +836,7 @@ const progress = computed(() =>
           >
             <i class="ph ph-scissors" />
           </button>
-          <button class="tbtn" title="Fullscreen (F)" @click="toggleFullscreen">
+          <button class="tbtn" :title="`Fullscreen${keyHint('fullscreen')}`" @click="toggleFullscreen">
             <i class="ph ph-corners-out" />
           </button>
         </div>

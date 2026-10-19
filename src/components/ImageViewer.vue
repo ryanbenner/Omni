@@ -7,6 +7,7 @@ import { useImageTransform } from "../composables/useImageTransform";
 import { ENCODABLE, canSave, extOf, saveAsName, saveRotated } from "../composables/useImageSave";
 import { parentDir, sepOf } from "../composables/pathUtils";
 import { settings } from "../composables/settings";
+import { keyHint } from "../composables/keymap";
 import { onEscape } from "../composables/dialogStack";
 
 const props = defineProps<{ item: MediaItem; hasPrev?: boolean; hasNext?: boolean }>();
@@ -253,17 +254,17 @@ defineExpose({ handleAction });
         <i class="ph ph-magnifying-glass-plus" />
       </button>
       <span class="pill-div" />
-      <button class="pill-btn" data-tip="Fit to window (F)" @click="t.reset()">
+      <button class="pill-btn" :data-tip="`Fit to window${keyHint('imageFit')}`" @click="t.reset()">
         <i class="ph ph-frame-corners" />
       </button>
-      <button class="pill-btn" data-tip="Rotate (R)" @click="t.rotate()">
+      <button class="pill-btn" :data-tip="`Rotate${keyHint('imageRotate')}`" @click="t.rotate()">
         <i class="ph ph-arrow-clockwise" />
       </button>
       <button class="pill-btn" data-tip="Fullscreen" @click="toggleFullscreen">
         <i class="ph ph-corners-out" />
       </button>
       <span class="pill-div" />
-      <button class="pill-btn" data-tip="Collage mode (C)" @click="emit('collage')">
+      <button class="pill-btn" :data-tip="`Collage mode${keyHint('enterCollage')}`" @click="emit('collage')">
         <i class="ph ph-images" />
       </button>
     </div>
