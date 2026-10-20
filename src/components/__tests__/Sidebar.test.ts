@@ -33,6 +33,12 @@ function wire() {
   });
 }
 
+function stubClipboard() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  return writeText;
+}
+
 async function mountWithPins() {
   localStorage.setItem(
     "mv-pins",
@@ -250,6 +256,15 @@ describe("Sidebar delete", () => {
     return w;
   }
 
+  it("Copy path copies a file's path", async () => {
+    const writeText = stubClipboard();
+    const w = await openMenuOnA();
+    await w.findAll(".menu-item").find((m) => m.text() === "Copy path")!.trigger("click");
+    expect(writeText).toHaveBeenCalledWith("C:\\a.jpg");
+    expect(w.find(".context-menu").exists()).toBe(false);
+    w.unmount();
+  });
+
   it("sidebar delete without confirmation still emits fileDeleted", async () => {
     settings.general.confirmDelete = false;
     const w = await openMenuOnA();
@@ -368,6 +383,16 @@ describe("Sidebar pin context menu", () => {
     expect(entry).toBeDefined();
     await entry!.trigger("click");
     expect(names(w)).toEqual(["A", "C"]);
+    expect(w.find(".context-menu").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("Copy path copies a folder's path and closes the menu", async () => {
+    const writeText = stubClipboard();
+    const w = await mountWithPins();
+    await w.findAll(".pin-row")[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+    await w.findAll(".menu-item").find((m) => m.text() === "Copy path")!.trigger("click");
+    expect(writeText).toHaveBeenCalledWith("C:\\B");
     expect(w.find(".context-menu").exists()).toBe(false);
     w.unmount();
   });

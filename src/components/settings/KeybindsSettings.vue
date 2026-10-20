@@ -94,6 +94,11 @@ let jumping = false;
 
 function onScroll() {
   if (!scroller || jumping) return;
+  // general is too short to ever be the most visible, so the top always means it
+  if (scroller.scrollTop <= 0) {
+    keybindGroup.value = groups[0].scope;
+    return;
+  }
   const view = scroller.getBoundingClientRect();
   const items = sections().map((el) => {
     const r = el.getBoundingClientRect();

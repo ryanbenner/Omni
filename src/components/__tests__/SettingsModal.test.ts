@@ -11,6 +11,9 @@ import { keybindGroup, keybindJump, keybindPromptOpen, settingsBlocked } from ".
 // a leaked keybinds page would answer the next test's jump
 enableAutoUnmount(afterEach);
 
+// top-level sections only; the keybinds groups nest under their section
+const top = (w: { findAll: (s: string) => any[] }) => w.findAll(".nav-item:not(.nav-sub)");
+
 describe("SettingsModal", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -25,31 +28,31 @@ describe("SettingsModal", () => {
     const items = w.findAll(".nav-item:not(.nav-sub)");
     expect(items.map((i) => i.text())).toEqual([
       "General",
+      "Keybinds",
       "Video Player",
       "Image Viewer",
-      "Collages",
       "PDF Viewer",
       "Markdown Editor",
-      "Keybinds",
+      "Collages",
     ]);
     expect(items[0].find("i").classes()).toContain("ph-sliders-horizontal");
-    expect(items[1].find("i").classes()).toContain("ph-film-strip");
-    expect(items[2].find("i").classes()).toContain("ph-image");
-    expect(items[3].find("i").classes()).toContain("ph-squares-four");
+    expect(items[1].find("i").classes()).toContain("ph-keyboard");
+    expect(items[2].find("i").classes()).toContain("ph-film-strip");
+    expect(items[3].find("i").classes()).toContain("ph-image");
     expect(items[4].find("i").classes()).toContain("ph-file-pdf");
     expect(items[5].find("i").classes()).toContain("ph-markdown-logo");
-    expect(items[6].find("i").classes()).toContain("ph-keyboard");
+    expect(items[6].find("i").classes()).toContain("ph-squares-four");
   });
 
   it("clicking a section swaps the page and records the selection", async () => {
     const w = mount(SettingsModal);
     expect(w.find(".page-title").text()).toBe("General");
-    expect(w.findAll(".nav-item")[0].classes()).toContain("active");
-    await w.findAll(".nav-item")[3].trigger("click");
+    expect(top(w)[0].classes()).toContain("active");
+    await top(w)[6].trigger("click");
     expect(w.find(".page-title").text()).toBe("Collages");
     expect(selectedSection.value).toBe("collage");
-    expect(w.findAll(".nav-item")[3].classes()).toContain("active");
-    expect(w.findAll(".nav-item")[0].classes()).not.toContain("active");
+    expect(top(w)[6].classes()).toContain("active");
+    expect(top(w)[0].classes()).not.toContain("active");
   });
 
   it("reopens on the section chosen last time", () => {
@@ -60,7 +63,7 @@ describe("SettingsModal", () => {
 
   it("placeholder sections say so without repeating the title", async () => {
     const w = mount(SettingsModal);
-    await w.findAll(".nav-item")[4].trigger("click");
+    await top(w)[4].trigger("click");
     expect(w.find(".page-body").text()).toBe("Not built yet.");
   });
 
@@ -129,7 +132,7 @@ describe("SettingsModal", () => {
     const onClose = vi.fn();
     const w = mount(SettingsModal, { attachTo: document.body, props: { onClose } });
     await w.findAll("[role=switch]")[2].trigger("click");
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     expect(w.find(".dialog").exists()).toBe(true);
     expect(w.find(".page-title").text()).toBe("General");
     await w.find(".dialog .btn-stay").trigger("click");
@@ -157,11 +160,11 @@ describe("SettingsModal", () => {
     const w = mount(SettingsModal, { attachTo: document.body });
     await w.findAll("[role=switch]")[2].trigger("click");
     expect(settingsBlocked.value).toBe(false);
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     expect(settingsBlocked.value).toBe(true);
     await w.find(".dialog .btn-stay").trigger("click");
     expect(settingsBlocked.value).toBe(false);
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     expect(settingsBlocked.value).toBe(true);
     w.unmount();
     expect(settingsBlocked.value).toBe(false);
@@ -170,7 +173,7 @@ describe("SettingsModal", () => {
   it("a backdrop press on the prompt stays put", async () => {
     const w = mount(SettingsModal, { attachTo: document.body });
     await w.findAll("[role=switch]")[2].trigger("click");
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     await w.find(".dialog-backdrop").trigger("pointerdown");
     expect(w.find(".dialog").exists()).toBe(false);
     expect(w.find(".page-title").text()).toBe("General");
@@ -182,13 +185,13 @@ describe("SettingsModal", () => {
     const onClose = vi.fn();
     const w = mount(SettingsModal, { attachTo: document.body, props: { onClose } });
     await w.findAll("[role=switch]")[2].trigger("click");
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     await w.find(".dialog .btn-revert").trigger("click");
     expect(w.find(".dialog").exists()).toBe(false);
     expect(w.find(".page-title").text()).toBe("Video Player");
     expect(settings.general.wrapAround).toBe(false);
     expect(w.find(".page-footer").exists()).toBe(false);
-    await w.findAll(".nav-item")[0].trigger("click");
+    await top(w)[0].trigger("click");
     await w.findAll("[role=switch]")[2].trigger("click");
     await w.find(".settings-close").trigger("click");
     await w.find(".dialog .btn-apply").trigger("click");
@@ -233,7 +236,7 @@ describe("SettingsModal", () => {
   it("escape with a typed, uncommitted number prompts instead of dropping it", async () => {
     const onClose = vi.fn();
     const w = mount(SettingsModal, { attachTo: document.body, props: { onClose } });
-    await w.findAll(".nav-item")[3].trigger("click"); // collages
+    await top(w)[6].trigger("click"); // collages
     const input = w.find("input.number");
     (input.element as HTMLInputElement).focus();
     (input.element as HTMLInputElement).value = "12";
@@ -252,7 +255,7 @@ describe("SettingsModal", () => {
     const w = mount(SettingsModal, { attachTo: document.body });
     await w.findAll("[role=switch]")[2].trigger("click");
     expect(w.find(".settings-nav").attributes("inert")).toBeUndefined();
-    await w.findAll(".nav-item")[1].trigger("click");
+    await top(w)[2].trigger("click");
     expect(w.find(".settings-nav").attributes("inert")).toBeDefined();
     expect(w.find(".settings-page").attributes("inert")).toBeDefined();
     await w.find(".dialog .btn-stay").trigger("click");
@@ -263,7 +266,7 @@ describe("SettingsModal", () => {
   it("keybinds has five nested group items right after it", () => {
     const w = mount(SettingsModal);
     const texts = w.findAll(".nav-item").map((i) => i.text());
-    expect(texts.slice(-6)).toEqual([
+    expect(texts.slice(1, 7)).toEqual([
       "Keybinds",
       "General Keybinds",
       "Video Keybinds",
@@ -271,37 +274,20 @@ describe("SettingsModal", () => {
       "PDF Keybinds",
       "Collage Keybinds",
     ]);
-    expect(w.findAll(".nav-item")[6].find("i").classes()).toContain("ph-keyboard");
     expect(w.findAll(".nav-sub").length).toBe(5);
   });
 
-  it("nested items are only highlighted on the keybinds page", async () => {
+  it("nested items stay folded away until the keybinds page opens", async () => {
     keybindGroup.value = "general";
     const w = mount(SettingsModal);
-    expect(w.findAll(".nav-sub.active").length).toBe(0);
-    await w.findAll(".nav-item")[6].trigger("click");
-    const active = w.findAll(".nav-sub.active");
-    expect(active.map((a) => a.text())).toEqual(["General Keybinds"]);
-  });
-
-  it("a nested item from another section goes to keybinds and jumps", async () => {
-    keybindJump.value = null;
-    const w = mount(SettingsModal);
-    const pdf = w.findAll(".nav-sub").find((n) => n.text() === "PDF Keybinds")!;
-    await pdf.trigger("click");
-    expect(w.find(".page-title").text()).toBe("Keybinds");
-    expect(keybindGroup.value).toBe("pdf");
-    expect(keybindJump.value).toBeNull();
-  });
-
-  it("a nested item asks first when the current page has unsaved edits", async () => {
-    const w = mount(SettingsModal, { attachTo: document.body });
-    await w.findAll("[role=switch]")[2].trigger("click");
-    const video = w.findAll(".nav-sub").find((n) => n.text() === "Video Keybinds")!;
-    await video.trigger("click");
-    expect(w.find(".dialog").exists()).toBe(true);
-    expect(selectedSection.value).toBe("general");
-    w.unmount();
+    expect(w.find(".nav-subs").classes()).not.toContain("open");
+    expect(w.find(".nav-subs").attributes("inert")).toBeDefined();
+    await top(w)[1].trigger("click");
+    expect(w.find(".nav-subs").classes()).toContain("open");
+    expect(w.find(".nav-subs").attributes("inert")).toBeUndefined();
+    expect(w.findAll(".nav-sub.active").map((a) => a.text())).toEqual(["General Keybinds"]);
+    await top(w)[0].trigger("click");
+    expect(w.find(".nav-subs").classes()).not.toContain("open");
   });
 
   it("a nested item on the keybinds page scrolls without asking, keeping the edit", async () => {
@@ -321,11 +307,11 @@ describe("SettingsModal", () => {
   it("revert to defaults shows only on keybinds and resets just the keybinds", async () => {
     const w = mount(SettingsModal);
     expect(w.find(".btn-revert").exists()).toBe(false);
-    await w.findAll(".nav-item")[6].trigger("click");
+    await top(w)[1].trigger("click");
     draft.keybinds.mute = "j";
     await nextTick();
     expect(w.find(".page-footer .btn-revert").exists()).toBe(true);
-    await w.find(".page-footer-left .btn-revert").trigger("click");
+    await w.find(".page-footer-left .btn-defaults").trigger("click");
     expect(draft.keybinds).toEqual(defaultKeybinds());
     expect(w.find(".page-footer").exists()).toBe(false);
   });
