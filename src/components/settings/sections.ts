@@ -8,12 +8,12 @@ import KeybindsSettings from "./KeybindsSettings.vue";
 
 export const SECTIONS = [
   { id: "general", label: "General", icon: "ph-sliders-horizontal", page: GeneralSettings },
+  { id: "keybinds", label: "Keybinds", icon: "ph-keyboard", page: KeybindsSettings },
   { id: "video", label: "Video Player", icon: "ph-film-strip", page: VideoSettings },
   { id: "image", label: "Image Viewer", icon: "ph-image", page: ImageSettings },
-  { id: "collage", label: "Collages", icon: "ph-squares-four", page: CollageSettings },
   { id: "pdf", label: "PDF Viewer", icon: "ph-file-pdf", page: PlaceholderSettings },
   { id: "markdown", label: "Markdown Editor", icon: "ph-markdown-logo", page: PlaceholderSettings },
-  { id: "keybinds", label: "Keybinds", icon: "ph-keyboard", page: KeybindsSettings },
+  { id: "collage", label: "Collages", icon: "ph-squares-four", page: CollageSettings },
 ] as const;
 
 export type SectionId = (typeof SECTIONS)[number]["id"];

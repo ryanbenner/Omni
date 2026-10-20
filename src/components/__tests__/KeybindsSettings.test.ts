@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, onTestFinished } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import SettingsModal from "../settings/SettingsModal.vue";
@@ -256,6 +256,29 @@ describe("KeybindsSettings", () => {
     keybindGroup.value = "collage";
     open();
     expect(keybindGroup.value).toBe("general");
+  });
+
+  it("at the very top General is highlighted even when Video fills more of the view", () => {
+    const spans: Record<string, [number, number]> = {
+      general: [28, 120],
+      video: [120, 560],
+      image: [560, 720],
+      pdf: [720, 940],
+      collage: [940, 1400],
+    };
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const [top, bottom] = this.dataset.scope ? spans[this.dataset.scope] : [0, 500];
+      return { top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: top, toJSON() {} } as DOMRect;
+    });
+    onTestFinished(() => rect.mockRestore());
+    keybindJump.value = null;
+    keybindGroup.value = "collage";
+    open();
+    expect(keybindGroup.value).toBe("general");
+    const body = w!.find(".page-body").element;
+    Object.defineProperty(body, "scrollTop", { value: 40, configurable: true });
+    body.dispatchEvent(new Event("scroll"));
+    expect(keybindGroup.value).toBe("video");
   });
 
   it("the scroll caused by a jump does not overwrite the group it set", async () => {

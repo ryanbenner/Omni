@@ -93,17 +93,24 @@ defineExpose({ requestClose });
           <i class="ph" :class="s.icon" />
           <span>{{ s.label }}</span>
         </button>
-        <template v-if="s.id === 'keybinds'">
-          <button
-            v-for="g in KEYBIND_GROUPS"
-            :key="g.scope"
-            class="nav-item nav-sub"
-            :class="{ active: selectedSection === 'keybinds' && keybindGroup === g.scope }"
-            @click="selectedSection === 'keybinds' ? jumpTo(g.scope) : guard(() => jumpTo(g.scope))"
-          >
-            <span>{{ g.label }}</span>
-          </button>
-        </template>
+        <div
+          v-if="s.id === 'keybinds'"
+          class="nav-subs"
+          :class="{ open: selectedSection === 'keybinds' }"
+          :inert="selectedSection !== 'keybinds' || undefined"
+        >
+          <div class="nav-subs-inner">
+            <button
+              v-for="g in KEYBIND_GROUPS"
+              :key="g.scope"
+              class="nav-item nav-sub"
+              :class="{ active: selectedSection === 'keybinds' && keybindGroup === g.scope }"
+              @click="jumpTo(g.scope)"
+            >
+              <span>{{ g.label }}</span>
+            </button>
+          </div>
+        </div>
       </template>
     </nav>
     <div class="settings-page" :inert="blocked ? true : undefined">
@@ -117,7 +124,7 @@ defineExpose({ requestClose });
         <component :is="current.page" />
       </div>
       <div v-if="current.id === 'keybinds'" class="page-footer-left">
-        <button class="btn-revert" @click="resetKeybindsDraft">Revert to defaults</button>
+        <button class="btn-defaults" @click="resetKeybindsDraft">Revert to defaults</button>
       </div>
       <div v-if="dirty" class="page-footer">
         <button class="btn-revert" @click="revertDraft">Revert</button>
@@ -199,6 +206,27 @@ defineExpose({ requestClose });
   padding-left: 32px;
   font-size: 12px;
 }
+/* the groups slide open under keybinds and fold away elsewhere */
+.nav-subs {
+  display: grid;
+  grid-template-rows: 0fr;
+  /* folded, it must not add a second nav gap */
+  margin-top: -2px;
+  transition: grid-template-rows 200ms ease;
+}
+.nav-subs-inner > :first-child {
+  margin-top: 2px;
+}
+.nav-subs.open {
+  grid-template-rows: 1fr;
+}
+.nav-subs-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .settings-page {
   position: relative;
   flex: 1;
@@ -261,8 +289,27 @@ defineExpose({ requestClose });
 }
 .page-footer-left {
   position: absolute;
-  left: 28px;
+  left: 16px;
   bottom: 16px;
+}
+/* same outline look as the empty screen's set default button, a size down */
+.btn-defaults {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--color-accent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-accent);
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-defaults:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.btn-defaults:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 .page-footer .btn-apply,
 .page-footer .btn-revert {

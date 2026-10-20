@@ -16,8 +16,8 @@ const win = getCurrentWindow();
     </div>
     <button
       class="tb-icon tb-sidebar"
-      :disabled="locked"
-      :inert="locked || undefined"
+      :disabled="locked || settingsOpen"
+      :inert="locked || settingsOpen || undefined"
       :title="sidebarOpen ? 'Hide file tree' : 'Show file tree'"
       @click="$emit('toggleSidebar')"
     >

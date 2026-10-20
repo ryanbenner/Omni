@@ -39,6 +39,14 @@ describe("Titlebar", () => {
     }
   });
 
+  it("the file tree toggle is disabled while settings is open, the gear is not", async () => {
+    const w = mount(Titlebar, { props: { sidebarOpen: true, settingsOpen: true } });
+    expect(w.find(".tb-sidebar").attributes("disabled")).toBeDefined();
+    expect(w.find(".tb-gear").attributes("disabled")).toBeUndefined();
+    await w.setProps({ settingsOpen: false });
+    expect(w.find(".tb-sidebar").attributes("disabled")).toBeUndefined();
+  });
+
   it("has a drag region", () => {
     const w = mount(Titlebar, { props: { sidebarOpen: true } });
     expect(w.find("[data-tauri-drag-region]").exists()).toBe(true);

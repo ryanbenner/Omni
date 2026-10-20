@@ -512,6 +512,17 @@ async function copyToClipboard() {
   }
 }
 
+async function copyPath() {
+  const m = menu.value;
+  menu.value = null;
+  if (!m) return;
+  try {
+    await navigator.clipboard.writeText(m.path);
+  } catch (e) {
+    await message(String(e), { title: "Copy failed", kind: "error" });
+  }
+}
+
 // delete asks in a pill where the menu was; a press anywhere else or escape
 // closes it with nothing done
 const confirm = ref<{ path: string; left: number; top: number } | null>(null);
@@ -685,6 +696,10 @@ async function deleteFile(path: string) {
           <i class="ph ph-push-pin" />
           {{ tree.isPinned(menu.path) ? "Unpin folder" : "Pin folder" }}
         </button>
+        <button class="menu-item" @click="copyPath">
+          <i class="ph ph-path" />
+          Copy path
+        </button>
       </template>
       <template v-else>
         <button v-if="canCollage(menu.name)" class="menu-item" @click="collageFromMenu">
@@ -694,6 +709,10 @@ async function deleteFile(path: string) {
         <button class="menu-item" @click="copyToClipboard">
           <i class="ph ph-copy" />
           Copy to clipboard
+        </button>
+        <button class="menu-item" @click="copyPath">
+          <i class="ph ph-path" />
+          Copy path
         </button>
         <button class="menu-item" @click="startRename">
           <i class="ph ph-pencil-simple" />
